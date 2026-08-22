@@ -1,0 +1,54 @@
+name: Real Hardware Gate
+
+on:
+  push:
+    branches: [ main, build/v1 ]
+
+permissions:
+  contents: read
+
+jobs:
+  hardware:
+    name: Build, test, and probe real hardware
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.400
+      - name: Runner info
+        shell: pwsh
+        run: |
+          Write-Host "RUNNER_OS=$env:RUNNER_OS"
+          Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
+          dotnet --info
+      - name: Restore solution
+        run: dotnet restore HardwareMonitor.sln
+      - name: Build solution
+        run: dotnet build HardwareMonitor.sln --configuration Release --no-restore
+      - name: Run unit tests
+        run: dotnet test --solution HardwareMonitor.sln --configuration Release --no-build --minimum-expected-tests 1
+      - name: Restore hardware smoke probe
+        run: dotnet restore tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj
+      - name: Probe actual hardware and temperatures
+        run: dotnet run --project tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj --configuration Release --no-restore
+      - name: Publish self-contained Windows app
+        run: dotnet publish src/HardwareMonitor.App/HardwareMonitor.App.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/portable --no-restore
+      - name: Verify published executable
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD 'artifacts/portable/HardwareMonitor.exe'
+          if (-not (Test-Path $exe)) { throw 'HardwareMonitor.exe was not published.' }
+          $item = Get-Item $exe
+          $hash = Get-FileHash $exe -Algorithm SHA256
+          Write-Host "PUBLISHED_EXE=$($item.Name)"
+          Write-Host "PUBLISHED_BYTES=$($item.Length)"
+          Write-Host "PUBLISHED_SHA256=$($hash.Hash)"
+      - name: Upload portable verification build
+        uses: actions/upload-artifact@v4
+        with:
+          name: HardwareMonitor-v1-portable-win-x64
+          path: artifacts/portable
+          if-no-files-found: error
+          retention-days: 7
