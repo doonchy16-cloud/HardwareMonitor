@@ -14,6 +14,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.Diagnostics
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.Platform.Windows", "src\HardwareMonitor.Platform.Windows\HardwareMonitor.Platform.Windows.csproj", "{B252EB78-BEDC-437B-B5BD-0E19B4518652}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.App", "src\HardwareMonitor.App\HardwareMonitor.App.csproj", "{D0C7EC90-0B63-4F80-AD8C-713D81A4D3B1}"
+EndProject
 Global
     GlobalSection(SolutionConfigurationPlatforms) = preSolution
         Debug|Any CPU = Debug|Any CPU
@@ -44,5 +46,9 @@ Global
         {B252EB78-BEDC-437B-B5BD-0E19B4518652}.Debug|Any CPU.Build.0 = Debug|Any CPU
         {B252EB78-BEDC-437B-B5BD-0E19B4518652}.Release|Any CPU.ActiveCfg = Release|Any CPU
         {B252EB78-BEDC-437B-B5BD-0E19B4518652}.Release|Any CPU.Build.0 = Release|Any CPU
+        {D0C7EC90-0B63-4F80-AD8C-713D81A4D3B1}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {D0C7EC90-0B63-4F80-AD8C-713D81A4D3B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {D0C7EC90-0B63-4F80-AD8C-713D81A4D3B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {D0C7EC90-0B63-4F80-AD8C-713D81A4D3B1}.Release|Any CPU.Build.0 = Release|Any CPU
     EndGlobalSection
 EndGlobal
