@@ -1,0 +1,16 @@
+.vs/
+.idea/
+.vscode/
+**/bin/
+**/obj/
+**/AppPackages/
+**/TestResults/
+*.user
+*.suo
+*.cache
+*.log
+*.pfx
+*.cer
+*.snk
+artifacts/
+.worktrees/

@@ -1,0 +1,29 @@
+name: CI
+
+on:
+  push:
+    branches: [ main, build/v1 ]
+  pull_request:
+    branches: [ main ]
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    name: Build and test
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.400
+          cache: true
+          cache-dependency-path: '**/packages.lock.json'
+      - name: Restore
+        run: dotnet restore HardwareMonitor.sln
+      - name: Build
+        run: dotnet build HardwareMonitor.sln --configuration Release --no-restore
+      - name: Test
+        run: dotnet test HardwareMonitor.sln --configuration Release --no-build --logger "trx;LogFileName=tests.trx"
