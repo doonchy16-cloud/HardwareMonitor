@@ -13,6 +13,9 @@ namespace TheSpark.HardwareMonitor.App.Pages;
 
 public partial class SettingsPage : UserControl
 {
+    private const string PackageName = "TheSpark.HardwareMonitor";
+    private const string ExecutionAlias = "HardwareMonitor.exe";
+
     private readonly HardwareMonitorService _monitorService;
     private readonly TelemetryViewModel _telemetry;
     private readonly RotatingDiagnosticLog _log;
@@ -83,8 +86,78 @@ public partial class SettingsPage : UserControl
     }
 
     private void OpenStartupApps_Click(object sender, RoutedEventArgs e) => OpenUri("ms-settings:startupapps");
-    private void Repair_Click(object sender, RoutedEventArgs e) => OpenUri("ms-settings:appsfeatures");
-    private void CheckUpdates_Click(object sender, RoutedEventArgs e) => OpenUri("https://github.com/doonchy16-cloud/HardwareMonitor/releases/latest/download/HardwareMonitor.appinstaller");
+
+    private void Repair_Click(object sender, RoutedEventArgs e)
+    {
+        if (!IsInstalledPackageAvailable())
+        {
+            ShowInstalledBuildRequired("Repair");
+            return;
+        }
+
+        var script = "$package = Get-AppxPackage -Name '" + PackageName + "' | Select-Object -First 1; " +
+                     "if ($null -ne $package) { " +
+                     "$uri = 'ms-settings:appsfeatures-app?' + [Uri]::EscapeDataString($package.PackageFamilyName); " +
+                     "Start-Process $uri }";
+
+        if (!StartDetachedPowerShell(script))
+        {
+            MessageBox.Show("Windows could not open Hardware Monitor's repair controls.", "Hardware Monitor", MessageBoxButton.OK, MessageBoxImage.Warning);
+        }
+    }
+
+    private void CheckUpdates_Click(object sender, RoutedEventArgs e)
+    {
+        var aliasPath = GetExecutionAliasPath();
+        if (!File.Exists(aliasPath))
+        {
+            ShowInstalledBuildRequired("Automatic updates");
+            return;
+        }
+
+        var script = $"Start-Sleep -Milliseconds 900; Start-Process -FilePath '{PowerShellQuote(aliasPath)}'";
+        if (!StartDetachedPowerShell(script))
+        {
+            MessageBox.Show("Windows could not restart Hardware Monitor to check for updates.", "Hardware Monitor", MessageBoxButton.OK, MessageBoxImage.Warning);
+            return;
+        }
+
+        Application.Current.Shutdown();
+    }
+
+    private static bool IsInstalledPackageAvailable() => File.Exists(GetExecutionAliasPath());
+
+    private static string GetExecutionAliasPath() => Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "Microsoft",
+        "WindowsApps",
+        ExecutionAlias);
+
+    private static bool StartDetachedPowerShell(string script)
+    {
+        try
+        {
+            return Process.Start(new ProcessStartInfo(
+                "powershell.exe",
+                $"-NoLogo -NoProfile -NonInteractive -ExecutionPolicy Bypass -Command \"{script}\"")
+            {
+                UseShellExecute = false,
+                CreateNoWindow = true
+            }) is not null;
+        }
+        catch (System.ComponentModel.Win32Exception)
+        {
+            return false;
+        }
+    }
+
+    private static string PowerShellQuote(string value) => value.Replace("'", "''", StringComparison.Ordinal);
+
+    private static void ShowInstalledBuildRequired(string action) => MessageBox.Show(
+        $"{action} is available after Hardware Monitor is installed through the Windows installer.",
+        "Hardware Monitor",
+        MessageBoxButton.OK,
+        MessageBoxImage.Information);
 
     private static void OpenUri(string uri)
     {
