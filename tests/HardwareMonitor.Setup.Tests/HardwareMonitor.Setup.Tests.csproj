@@ -12,5 +12,6 @@
     <PackageReference Include="xunit.v3" />
     <ProjectReference Include="..\..\src\HardwareMonitor.Setup.Core\HardwareMonitor.Setup.Core.csproj" />
     <None Include="..\..\src\HardwareMonitor.Setup\app.manifest" Link="Fixtures\app.manifest" CopyToOutputDirectory="PreserveNewest" />
+    <None Include="..\..\packaging\HardwareMonitor.appinstaller.template" Link="Fixtures\HardwareMonitor.appinstaller.template" CopyToOutputDirectory="PreserveNewest" />
   </ItemGroup>
 </Project>
