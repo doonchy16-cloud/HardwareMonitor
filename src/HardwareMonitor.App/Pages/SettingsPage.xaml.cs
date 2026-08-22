@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Reflection;
 using System.Text;
 using System.Windows;
@@ -81,9 +82,9 @@ public partial class SettingsPage : UserControl
         Clipboard.SetText(report);
     }
 
-    private static void OpenStartupApps_Click(object sender, RoutedEventArgs e) => OpenUri("ms-settings:startupapps");
-    private static void Repair_Click(object sender, RoutedEventArgs e) => OpenUri("ms-settings:appsfeatures");
-    private static void CheckUpdates_Click(object sender, RoutedEventArgs e) => OpenUri("https://github.com/doonchy16-cloud/HardwareMonitor/releases/latest/download/HardwareMonitor.appinstaller");
+    private void OpenStartupApps_Click(object sender, RoutedEventArgs e) => OpenUri("ms-settings:startupapps");
+    private void Repair_Click(object sender, RoutedEventArgs e) => OpenUri("ms-settings:appsfeatures");
+    private void CheckUpdates_Click(object sender, RoutedEventArgs e) => OpenUri("https://github.com/doonchy16-cloud/HardwareMonitor/releases/latest/download/HardwareMonitor.appinstaller");
 
     private static void OpenUri(string uri)
     {
