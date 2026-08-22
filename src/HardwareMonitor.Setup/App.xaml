@@ -1,0 +1,14 @@
+<Application x:Class="TheSpark.HardwareMonitor.Setup.App"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             StartupUri="MainWindow.xaml">
+    <Application.Resources>
+        <SolidColorBrush x:Key="WindowBackground" Color="#111118" />
+        <SolidColorBrush x:Key="SurfaceBrush" Color="#1A1A25" />
+        <SolidColorBrush x:Key="BorderBrush" Color="#343447" />
+        <SolidColorBrush x:Key="PrimaryTextBrush" Color="#F6F3FF" />
+        <SolidColorBrush x:Key="MutedTextBrush" Color="#AAA5B9" />
+        <SolidColorBrush x:Key="PurpleBrush" Color="#9B5CFF" />
+        <SolidColorBrush x:Key="AmberBrush" Color="#FFB020" />
+    </Application.Resources>
+</Application>
