@@ -40,7 +40,7 @@ jobs:
         with:
           dotnet-version: 10.0.400
       - name: Runner info
-        shell: pwsh
+        shell: powershell
         run: |
           Write-Host "RUNNER_OS=$env:RUNNER_OS"
           Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
@@ -59,7 +59,7 @@ jobs:
       - name: Publish self-contained Windows app
         run: dotnet publish src/HardwareMonitor.App/HardwareMonitor.App.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/portable --no-restore
       - name: Verify published executable
-        shell: pwsh
+        shell: powershell
         run: |
           $exe = Join-Path $PWD 'artifacts/portable/HardwareMonitor.exe'
           if (-not (Test-Path $exe)) { throw 'HardwareMonitor.exe was not published.' }
@@ -71,7 +71,7 @@ jobs:
       - name: Publish setup bootstrap
         run: dotnet publish src/HardwareMonitor.Setup/HardwareMonitor.Setup.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/setup --no-restore
       - name: Verify setup executable
-        shell: pwsh
+        shell: powershell
         run: |
           $exe = Join-Path $PWD 'artifacts/setup/HardwareMonitor-Setup.exe'
           if (-not (Test-Path $exe)) { throw 'HardwareMonitor-Setup.exe was not published.' }
@@ -81,7 +81,7 @@ jobs:
           Write-Host "SETUP_BYTES=$($item.Length)"
           Write-Host "SETUP_SHA256=$($hash.Hash)"
       - name: Build and validate unsigned MSIX
-        shell: pwsh
+        shell: powershell
         run: ./packaging/Build-Msix.ps1 -Version 1.0.0.0 -Publisher 'CN=The Spark' -ReleaseTag v1.0.0
       - name: Upload portable verification build
         uses: actions/upload-artifact@v4
