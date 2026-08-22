@@ -1,0 +1,152 @@
+name: Release Stable
+
+on:
+  push:
+    tags:
+      - 'v*.*.*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    name: Build, sign, verify, and publish stable release
+    runs-on: windows-latest
+    timeout-minutes: 30
+    env:
+      PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+      PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+      TIMESTAMP_URL: http://timestamp.digicert.com
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.400
+
+      - name: Validate tag, main authority, and signing identity
+        shell: pwsh
+        run: |
+          $tag = $env:GITHUB_REF_NAME
+          if ($tag -notmatch '^v(\d+)\.(\d+)\.(\d+)$') {
+            throw "Release tag must be semantic version vMAJOR.MINOR.PATCH."
+          }
+
+          git fetch origin main --no-tags
+          git merge-base --is-ancestor $env:GITHUB_SHA origin/main
+          if ($LASTEXITCODE -ne 0) {
+            throw "Release tags must point to a commit already contained in authoritative main."
+          }
+
+          [xml]$props = Get-Content 'Directory.Build.props'
+          $projectVersion = [string]$props.Project.PropertyGroup.VersionPrefix
+          $tagVersion = $tag.Substring(1)
+          if ($projectVersion -ne $tagVersion) {
+            throw "Tag version $tagVersion does not match Directory.Build.props VersionPrefix $projectVersion."
+          }
+
+          if ([string]::IsNullOrWhiteSpace($env:PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:PFX_PASSWORD)) {
+            throw "Production signing secrets WINDOWS_SIGNING_PFX_BASE64 and WINDOWS_SIGNING_PFX_PASSWORD are required."
+          }
+
+          $signingDir = Join-Path $env:RUNNER_TEMP 'hardwaremonitor-signing'
+          New-Item -ItemType Directory -Path $signingDir -Force | Out-Null
+          $pfxPath = Join-Path $signingDir 'the-spark.pfx'
+          [System.IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:PFX_BASE64))
+
+          $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+          $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($pfxPath, $env:PFX_PASSWORD, $flags)
+          if (-not $cert.HasPrivateKey) { throw 'Signing certificate does not contain a private key.' }
+          if ($cert.NotAfter -le (Get-Date).AddDays(30)) { throw "Signing certificate expires too soon: $($cert.NotAfter)." }
+          if ([string]::IsNullOrWhiteSpace($cert.Subject)) { throw 'Signing certificate has an empty publisher subject.' }
+
+          $msixVersion = "$tagVersion.0"
+          "RELEASE_TAG=$tag" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "PRODUCT_VERSION=$tagVersion" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "MSIX_VERSION=$msixVersion" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "MSIX_PUBLISHER=$($cert.Subject)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "SIGNING_PFX_PATH=$pfxPath" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Release identity validated for Hardware Monitor $tagVersion."
+          Write-Host "MSIX publisher subject: $($cert.Subject)"
+
+      - name: Restore
+        run: dotnet restore HardwareMonitor.sln
+
+      - name: Build
+        run: dotnet build HardwareMonitor.sln --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test --solution HardwareMonitor.sln --configuration Release --no-build --minimum-expected-tests 1
+
+      - name: Build signed and timestamped MSIX
+        shell: pwsh
+        run: |
+          ./packaging/Build-Msix.ps1 `
+            -Version $env:MSIX_VERSION `
+            -Publisher $env:MSIX_PUBLISHER `
+            -ReleaseTag $env:RELEASE_TAG `
+            -CertificatePath $env:SIGNING_PFX_PATH `
+            -CertificatePassword $env:PFX_PASSWORD `
+            -TimestampUrl $env:TIMESTAMP_URL
+
+      - name: Publish setup bootstrap
+        run: dotnet publish src/HardwareMonitor.Setup/HardwareMonitor.Setup.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/setup --no-restore
+
+      - name: Sign and verify setup bootstrap
+        shell: pwsh
+        run: |
+          $kitsBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
+          $signTool = Get-ChildItem $kitsBin -Filter SignTool.exe -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\SignTool\.exe$' } |
+            Sort-Object { try { [version]$_.Directory.Parent.Name } catch { [version]'0.0' } } -Descending |
+            Select-Object -First 1
+          if (-not $signTool) { throw 'SignTool.exe was not found. Install the Windows SDK.' }
+
+          $setupExe = Join-Path $PWD 'artifacts/setup/HardwareMonitor-Setup.exe'
+          if (-not (Test-Path $setupExe)) { throw 'HardwareMonitor-Setup.exe was not published.' }
+
+          & $signTool.FullName sign /fd SHA256 /a /f $env:SIGNING_PFX_PATH /p $env:PFX_PASSWORD /tr $env:TIMESTAMP_URL /td SHA256 $setupExe
+          if ($LASTEXITCODE -ne 0) { throw "Setup signing or timestamping failed with exit code $LASTEXITCODE." }
+
+          & $signTool.FullName verify /pa /v $setupExe
+          if ($LASTEXITCODE -ne 0) { throw "Setup signature verification failed with exit code $LASTEXITCODE." }
+
+      - name: Generate release hashes
+        shell: pwsh
+        run: |
+          $msix = Get-ChildItem 'artifacts/package' -Filter '*.msix' | Select-Object -Single 1
+          $appInstaller = Join-Path $PWD 'artifacts/package/HardwareMonitor.appinstaller'
+          $setup = Join-Path $PWD 'artifacts/setup/HardwareMonitor-Setup.exe'
+          $lines = @(
+            "$(Get-FileHash $msix.FullName -Algorithm SHA256 | Select-Object -ExpandProperty Hash)  $($msix.Name)",
+            "$(Get-FileHash $appInstaller -Algorithm SHA256 | Select-Object -ExpandProperty Hash)  HardwareMonitor.appinstaller",
+            "$(Get-FileHash $setup -Algorithm SHA256 | Select-Object -ExpandProperty Hash)  HardwareMonitor-Setup.exe"
+          )
+          $lines | Set-Content 'artifacts/SHA256SUMS.txt' -Encoding ascii
+          Get-Content 'artifacts/SHA256SUMS.txt'
+
+      - name: Publish immutable-version release assets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $msix = Get-ChildItem 'artifacts/package' -Filter '*.msix' | Select-Object -Single 1
+          gh release create $env:RELEASE_TAG `
+            $msix.FullName `
+            'artifacts/package/HardwareMonitor.appinstaller' `
+            'artifacts/setup/HardwareMonitor-Setup.exe' `
+            'artifacts/SHA256SUMS.txt' `
+            --repo $env:GITHUB_REPOSITORY `
+            --verify-tag `
+            --title "Hardware Monitor $env:PRODUCT_VERSION" `
+            --generate-notes
+
+      - name: Remove signing material
+        if: always()
+        shell: pwsh
+        run: |
+          if (-not [string]::IsNullOrWhiteSpace($env:SIGNING_PFX_PATH) -and (Test-Path $env:SIGNING_PFX_PATH)) {
+            Remove-Item $env:SIGNING_PFX_PATH -Force
+          }
