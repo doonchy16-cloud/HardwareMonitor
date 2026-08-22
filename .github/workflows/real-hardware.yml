@@ -13,8 +13,23 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  announce:
+    name: Announce real hardware gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish pending hardware status
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $target = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          $body = @{ state = 'pending'; context = 'hardware-monitor/real'; description = 'Waiting for self-hosted Windows hardware gate'; target_url = $target } | ConvertTo-Json
+          Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' } -Body $body -ContentType 'application/json' | Out-Null
+
   hardware:
     name: Build, test, package, and probe real hardware
+    needs: announce
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 25
     steps:
@@ -88,15 +103,22 @@ jobs:
             artifacts/package/*.appinstaller
           if-no-files-found: error
           retention-days: 7
-      - name: Publish hardware gate status
-        if: always()
+
+  report:
+    name: Report real hardware gate
+    if: always()
+    needs: [announce, hardware]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish terminal hardware status
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
-          JOB_STATUS: ${{ job.status }}
+          HARDWARE_RESULT: ${{ needs.hardware.result }}
         run: |
-          $state = if ($env:JOB_STATUS -eq 'success') { 'success' } else { 'failure' }
-          $description = if ($state -eq 'success') { 'Real Windows hardware, tests, and MSIX gate passed' } else { 'Real Windows hardware/MSIX gate failed' }
+          $state = if ($env:HARDWARE_RESULT -eq 'success') { 'success' } else { 'failure' }
+          $description = if ($state -eq 'success') { 'Real Windows hardware, tests, and MSIX gate passed' } else { "Real Windows hardware/MSIX gate: $env:HARDWARE_RESULT" }
           $target = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
           $body = @{ state = $state; context = 'hardware-monitor/real'; description = $description; target_url = $target } | ConvertTo-Json
           Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' } -Body $body -ContentType 'application/json' | Out-Null
