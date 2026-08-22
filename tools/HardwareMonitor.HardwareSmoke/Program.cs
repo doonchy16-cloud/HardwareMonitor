@@ -9,12 +9,12 @@ Console.WriteLine($"ARCH={RuntimeInformation.ProcessArchitecture}");
 var inventoryProvider = new SystemInventoryProvider();
 var inventory = await inventoryProvider.GetSnapshotAsync();
 var inventoryHealthy = !string.IsNullOrWhiteSpace(inventory.OperatingSystem)
-    && !string.IsNullOrWhiteSpace(inventory.CpuName)
-    && inventory.TotalPhysicalMemoryBytes > 0;
+    && !string.IsNullOrWhiteSpace(inventory.Cpu)
+    && inventory.TotalMemoryBytes > 0;
 
 Console.WriteLine($"INVENTORY_HEALTHY={inventoryHealthy}");
 Console.WriteLine($"GPU_COUNT={inventory.Gpus.Count}");
-Console.WriteLine($"STORAGE_COUNT={inventory.Storage.Count}");
+Console.WriteLine($"STORAGE_COUNT={inventory.StorageDevices.Count}");
 
 using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
 await using var provider = new LibreHardwareMonitorProvider();
