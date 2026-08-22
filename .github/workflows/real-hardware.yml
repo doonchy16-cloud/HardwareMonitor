@@ -32,11 +32,11 @@ jobs:
     needs: announce
     runs-on: [self-hosted, Windows, X64]
     timeout-minutes: 25
-    env:
-      DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
         with:
           dotnet-version: 10.0.400
       - name: Runner info
@@ -44,7 +44,7 @@ jobs:
         run: |
           Write-Host "RUNNER_OS=$env:RUNNER_OS"
           Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
-          Write-Host "DOTNET_INSTALL_DIR=$env:DOTNET_INSTALL_DIR"
+          Write-Host "DOTNET_ROOT=$env:DOTNET_ROOT"
           dotnet --info
       - name: Restore solution
         run: dotnet restore HardwareMonitor.sln
