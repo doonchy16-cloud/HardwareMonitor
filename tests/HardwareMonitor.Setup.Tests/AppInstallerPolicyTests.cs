@@ -9,7 +9,8 @@ public sealed class AppInstallerPolicyTests
     {
         var templatePath = Path.Combine(AppContext.BaseDirectory, "Fixtures", "HardwareMonitor.appinstaller.template");
         var document = XDocument.Load(templatePath);
-        var root = Assert.NotNull(document.Root);
+        Assert.NotNull(document.Root);
+        var root = document.Root!;
         var ns = root.Name.Namespace;
 
         var onLaunch = Assert.Single(root.Descendants(ns + "OnLaunch"));
