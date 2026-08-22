@@ -7,7 +7,8 @@ param(
     [string]$AppInstallerUri = "https://github.com/doonchy16-cloud/HardwareMonitor/releases/latest/download/HardwareMonitor.appinstaller",
     [string]$PackageUri = "",
     [string]$CertificatePath = "",
-    [string]$CertificatePassword = ""
+    [string]$CertificatePassword = "",
+    [string]$TimestampUrl = "http://timestamp.digicert.com"
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,13 +67,15 @@ if (-not [string]::IsNullOrWhiteSpace($CertificatePath)) {
     $resolvedCertificate = (Resolve-Path $CertificatePath).Path
     $signTool = Join-Path $makeAppx.Directory.FullName "SignTool.exe"
     if (-not (Test-Path $signTool)) { throw "SignTool.exe was not found beside MakeAppx.exe." }
+    if ([string]::IsNullOrWhiteSpace($TimestampUrl)) { throw "A timestamp URL is required for production signing." }
+
     $signArgs = @("sign", "/fd", "SHA256", "/a", "/f", $resolvedCertificate)
     if (-not [string]::IsNullOrWhiteSpace($CertificatePassword)) {
         $signArgs += @("/p", $CertificatePassword)
     }
-    $signArgs += $packagePath
+    $signArgs += @("/tr", $TimestampUrl, "/td", "SHA256", $packagePath)
     & $signTool @signArgs
-    if ($LASTEXITCODE -ne 0) { throw "SignTool signing failed with exit code $LASTEXITCODE." }
+    if ($LASTEXITCODE -ne 0) { throw "SignTool signing or timestamping failed with exit code $LASTEXITCODE." }
 
     & $signTool verify /pa /v $packagePath
     if ($LASTEXITCODE -ne 0) { throw "SignTool verification failed with exit code $LASTEXITCODE." }
