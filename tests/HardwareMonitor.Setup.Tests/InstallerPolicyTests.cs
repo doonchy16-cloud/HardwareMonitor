@@ -1,3 +1,4 @@
+using System.Text;
 using TheSpark.HardwareMonitor.Setup;
 
 namespace TheSpark.HardwareMonitor.Setup.Tests;
@@ -27,6 +28,16 @@ public sealed class InstallerPolicyTests
     {
         Assert.Equal("1F519A22E47187F70A1379A48CA604981C4FCF694F4E65B734AAA74A9FBA3032", InstallerPolicy.PawnIoSha256);
         Assert.Equal(new Version(2, 2, 0, 0), InstallerPolicy.MinimumPawnIoVersion);
+    }
+
+    [Fact]
+    public void Hash_verification_rejects_modified_payloads()
+    {
+        var payload = Encoding.UTF8.GetBytes("pawnio-test-payload");
+        var actual = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(payload));
+
+        Assert.True(InstallerPolicy.IsSha256Match(payload, actual));
+        Assert.False(InstallerPolicy.IsSha256Match(payload, new string('0', 64)));
     }
 
     [Fact]
