@@ -11,6 +11,7 @@
     <SelfContained>true</SelfContained>
   </PropertyGroup>
   <ItemGroup>
+    <Resource Include="Assets\AppIcon.png" />
     <ProjectReference Include="..\HardwareMonitor.Core\HardwareMonitor.Core.csproj" />
     <ProjectReference Include="..\HardwareMonitor.Diagnostics\HardwareMonitor.Diagnostics.csproj" />
     <ProjectReference Include="..\HardwareMonitor.Platform.Windows\HardwareMonitor.Platform.Windows.csproj" />
