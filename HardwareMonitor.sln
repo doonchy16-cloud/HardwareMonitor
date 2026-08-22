@@ -16,6 +16,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.Platform.Wi
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.App", "src\HardwareMonitor.App\HardwareMonitor.App.csproj", "{D0C7EC90-0B63-4F80-AD8C-713D81A4D3B1}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.Setup", "src\HardwareMonitor.Setup\HardwareMonitor.Setup.csproj", "{7618BE67-2CCB-4D45-9D0A-8614AD97DF41}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.Setup.Tests", "tests\HardwareMonitor.Setup.Tests\HardwareMonitor.Setup.Tests.csproj", "{C0C865F0-006C-424B-BBCB-5E98376B0B0E}"
+EndProject
 Global
     GlobalSection(SolutionConfigurationPlatforms) = preSolution
         Debug|Any CPU = Debug|Any CPU
@@ -50,5 +54,13 @@ Global
         {D0C7EC90-0B63-4F80-AD8C-713D81A4D3B1}.Debug|Any CPU.Build.0 = Debug|Any CPU
         {D0C7EC90-0B63-4F80-AD8C-713D81A4D3B1}.Release|Any CPU.ActiveCfg = Release|Any CPU
         {D0C7EC90-0B63-4F80-AD8C-713D81A4D3B1}.Release|Any CPU.Build.0 = Release|Any CPU
+        {7618BE67-2CCB-4D45-9D0A-8614AD97DF41}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {7618BE67-2CCB-4D45-9D0A-8614AD97DF41}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {7618BE67-2CCB-4D45-9D0A-8614AD97DF41}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {7618BE67-2CCB-4D45-9D0A-8614AD97DF41}.Release|Any CPU.Build.0 = Release|Any CPU
+        {C0C865F0-006C-424B-BBCB-5E98376B0B0E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {C0C865F0-006C-424B-BBCB-5E98376B0B0E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {C0C865F0-006C-424B-BBCB-5E98376B0B0E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {C0C865F0-006C-424B-BBCB-5E98376B0B0E}.Release|Any CPU.Build.0 = Release|Any CPU
     EndGlobalSection
 EndGlobal
