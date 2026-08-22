@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using System.Diagnostics;
 using System.IO;
 using System.Net.Http;
@@ -38,13 +39,13 @@ public sealed class InstallerService
 
                 var pawnIoPath = Path.Combine(tempRoot, "PawnIO_setup.exe");
                 await File.WriteAllBytesAsync(pawnIoPath, pawnIoBytes, cancellationToken);
-                var pawnExit = await RunProcessAsync(pawnIoPath, "-install -silent", cancellationToken);
-                if (!InstallerPolicy.IsAcceptedPawnIoExitCode(pawnExit.ExitCode))
+                var pawnExitCode = await RunElevatedProcessAsync(pawnIoPath, "-install -silent", cancellationToken);
+                if (!InstallerPolicy.IsAcceptedPawnIoExitCode(pawnExitCode))
                 {
-                    throw new InvalidOperationException($"PawnIO installer failed with exit code {pawnExit.ExitCode}. {TrimError(pawnExit.StandardError)}");
+                    throw new InvalidOperationException($"PawnIO installer failed with exit code {pawnExitCode}.");
                 }
 
-                rebootRequired = pawnExit.ExitCode == 3010;
+                rebootRequired = pawnExitCode == 3010;
             }
             else
             {
@@ -168,6 +169,33 @@ public sealed class InstallerService
         var localAppData = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
         var aliasPath = InstallerPolicy.GetExecutionAliasPath(localAppData);
         Process.Start(new ProcessStartInfo(aliasPath) { UseShellExecute = true });
+    }
+
+    private static async Task<int> RunElevatedProcessAsync(string fileName, string arguments, CancellationToken cancellationToken)
+    {
+        using var process = new Process
+        {
+            StartInfo = new ProcessStartInfo(fileName, arguments)
+            {
+                UseShellExecute = true,
+                Verb = "runas"
+            }
+        };
+
+        try
+        {
+            if (!process.Start())
+            {
+                throw new InvalidOperationException($"Could not start {Path.GetFileName(fileName)} with administrator approval.");
+            }
+        }
+        catch (Win32Exception ex) when (ex.NativeErrorCode == 1223)
+        {
+            throw new InvalidOperationException("Administrator approval is required to install the PawnIO hardware driver.", ex);
+        }
+
+        await process.WaitForExitAsync(cancellationToken);
+        return process.ExitCode;
     }
 
     private static async Task<ProcessResult> RunProcessAsync(string fileName, string arguments, CancellationToken cancellationToken)
