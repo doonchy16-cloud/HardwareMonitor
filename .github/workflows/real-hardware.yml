@@ -8,6 +8,10 @@ permissions:
   contents: read
   statuses: write
 
+concurrency:
+  group: real-hardware-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   hardware:
     name: Build, test, package, and probe real hardware
@@ -46,6 +50,18 @@ jobs:
           Write-Host "PUBLISHED_EXE=$($item.Name)"
           Write-Host "PUBLISHED_BYTES=$($item.Length)"
           Write-Host "PUBLISHED_SHA256=$($hash.Hash)"
+      - name: Publish setup bootstrap
+        run: dotnet publish src/HardwareMonitor.Setup/HardwareMonitor.Setup.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/setup --no-restore
+      - name: Verify setup executable
+        shell: pwsh
+        run: |
+          $exe = Join-Path $PWD 'artifacts/setup/HardwareMonitor-Setup.exe'
+          if (-not (Test-Path $exe)) { throw 'HardwareMonitor-Setup.exe was not published.' }
+          $item = Get-Item $exe
+          $hash = Get-FileHash $exe -Algorithm SHA256
+          Write-Host "SETUP_EXE=$($item.Name)"
+          Write-Host "SETUP_BYTES=$($item.Length)"
+          Write-Host "SETUP_SHA256=$($hash.Hash)"
       - name: Build and validate unsigned MSIX
         shell: pwsh
         run: ./packaging/Build-Msix.ps1 -Version 1.0.0.0 -Publisher 'CN=The Spark' -ReleaseTag v1.0.0
@@ -54,6 +70,13 @@ jobs:
         with:
           name: HardwareMonitor-v1-portable-win-x64
           path: artifacts/portable
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload setup verification build
+        uses: actions/upload-artifact@v4
+        with:
+          name: HardwareMonitor-v1-setup-win-x64
+          path: artifacts/setup
           if-no-files-found: error
           retention-days: 7
       - name: Upload MSIX verification package
