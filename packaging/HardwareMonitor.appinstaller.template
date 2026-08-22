@@ -13,4 +13,7 @@
     <OnLaunch HoursBetweenUpdateChecks="0" ShowPrompt="false" UpdateBlocksActivation="false" />
     <AutomaticBackgroundTask />
   </UpdateSettings>
+  <RepairUris>
+    <RepairUri>__APPINSTALLER_URI__</RepairUri>
+  </RepairUris>
 </AppInstaller>
