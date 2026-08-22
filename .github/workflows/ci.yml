@@ -24,4 +24,4 @@ jobs:
       - name: Build
         run: dotnet build HardwareMonitor.sln --configuration Release --no-restore
       - name: Test
-        run: dotnet test HardwareMonitor.sln --configuration Release --no-build --logger "trx;LogFileName=tests.trx"
+        run: dotnet test --solution HardwareMonitor.sln --configuration Release --no-build --minimum-expected-tests 1
