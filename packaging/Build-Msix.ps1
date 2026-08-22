@@ -72,7 +72,10 @@ if (-not [string]::IsNullOrWhiteSpace($CertificatePath)) {
     }
     $signArgs += $packagePath
     & $signTool @signArgs
-    if ($LASTEXITCODE -ne 0) { throw "SignTool failed with exit code $LASTEXITCODE." }
+    if ($LASTEXITCODE -ne 0) { throw "SignTool signing failed with exit code $LASTEXITCODE." }
+
+    & $signTool verify /pa /v $packagePath
+    if ($LASTEXITCODE -ne 0) { throw "SignTool verification failed with exit code $LASTEXITCODE." }
 }
 
 $appInstallerTemplate = Get-Content (Join-Path $PSScriptRoot "HardwareMonitor.appinstaller.template") -Raw
