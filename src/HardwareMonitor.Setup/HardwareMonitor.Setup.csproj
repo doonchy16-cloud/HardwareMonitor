@@ -13,5 +13,6 @@
   </PropertyGroup>
   <ItemGroup>
     <Resource Include="..\HardwareMonitor.App\Assets\AppIcon.png" Link="Assets\AppIcon.png" />
+    <ProjectReference Include="..\HardwareMonitor.Setup.Core\HardwareMonitor.Setup.Core.csproj" />
   </ItemGroup>
 </Project>
