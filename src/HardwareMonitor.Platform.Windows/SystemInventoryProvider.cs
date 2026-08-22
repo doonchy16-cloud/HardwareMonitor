@@ -51,7 +51,7 @@ public sealed class SystemInventoryProvider
                 using (item)
                 {
                     return item.Properties.Cast<PropertyData>()
-                        .ToDictionary(property => property.Name, property => property.Value, StringComparer.OrdinalIgnoreCase);
+                        .ToDictionary(property => property.Name, property => (object?)property.Value, StringComparer.OrdinalIgnoreCase);
                 }
             }
         }
@@ -83,7 +83,7 @@ public sealed class SystemInventoryProvider
                 using (item)
                 {
                     var row = item.Properties.Cast<PropertyData>()
-                        .ToDictionary(property => property.Name, property => property.Value, StringComparer.OrdinalIgnoreCase);
+                        .ToDictionary(property => property.Name, property => (object?)property.Value, StringComparer.OrdinalIgnoreCase);
                     values.Add(selector(row));
                 }
             }
