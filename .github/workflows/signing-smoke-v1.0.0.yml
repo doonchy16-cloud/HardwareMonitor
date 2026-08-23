@@ -42,26 +42,32 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $passwordPlain = [guid]::NewGuid().ToString('N')
-          $password = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
-          $cert = New-SelfSignedCertificate `
-            -Subject 'CN=The Spark Test Signing' `
-            -Type CodeSigningCert `
-            -KeyAlgorithm RSA `
-            -KeyLength 3072 `
-            -HashAlgorithm SHA256 `
-            -CertStoreLocation 'Cert:\CurrentUser\My' `
-            -NotAfter (Get-Date).AddDays(7)
+          $rsa = [System.Security.Cryptography.RSA]::Create(3072)
+          $request = [System.Security.Cryptography.X509Certificates.CertificateRequest]::new(
+            'CN=The Spark Test Signing',
+            $rsa,
+            [System.Security.Cryptography.HashAlgorithmName]::SHA256,
+            [System.Security.Cryptography.RSASignaturePadding]::Pkcs1)
 
+          $eku = [System.Security.Cryptography.OidCollection]::new()
+          [void]$eku.Add([System.Security.Cryptography.Oid]::new('1.3.6.1.5.5.7.3.3'))
+          $request.CertificateExtensions.Add([System.Security.Cryptography.X509Certificates.X509EnhancedKeyUsageExtension]::new($eku, $false))
+          $request.CertificateExtensions.Add([System.Security.Cryptography.X509Certificates.X509BasicConstraintsExtension]::new($false, $false, 0, $true))
+          $request.CertificateExtensions.Add([System.Security.Cryptography.X509Certificates.X509SubjectKeyIdentifierExtension]::new($request.PublicKey, $false))
+
+          $cert = $request.CreateSelfSigned((Get-Date).AddMinutes(-5), (Get-Date).AddDays(7))
           $pfxPath = Join-Path $env:RUNNER_TEMP 'hardwaremonitor-test-signing.pfx'
-          Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $password | Out-Null
-          $cerPath = Join-Path $env:RUNNER_TEMP 'hardwaremonitor-test-signing.cer'
-          Export-Certificate -Cert $cert -FilePath $cerPath | Out-Null
-          Import-Certificate -FilePath $cerPath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+          [System.IO.File]::WriteAllBytes($pfxPath, $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $passwordPlain))
+
+          $rootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new('Root', [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
+          $rootStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
+          try { $rootStore.Add($cert) } finally { $rootStore.Close() }
 
           "TEST_PFX_PATH=$pfxPath" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "TEST_PFX_PASSWORD=$passwordPlain" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "TEST_PUBLISHER=$($cert.Subject)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "TEST_CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          Write-Host "Ephemeral test signing certificate created: $($cert.Subject)"
 
       - name: Restore solution
         run: dotnet restore HardwareMonitor.sln
@@ -125,8 +131,6 @@ jobs:
         shell: pwsh
         run: |
           Remove-Item $env:TEST_PFX_PATH -Force -ErrorAction SilentlyContinue
-          Remove-Item (Join-Path $env:RUNNER_TEMP 'hardwaremonitor-test-signing.cer') -Force -ErrorAction SilentlyContinue
           if (-not [string]::IsNullOrWhiteSpace($env:TEST_CERT_THUMBPRINT)) {
-            Remove-Item "Cert:\CurrentUser\My\$env:TEST_CERT_THUMBPRINT" -Force -ErrorAction SilentlyContinue
             Remove-Item "Cert:\CurrentUser\Root\$env:TEST_CERT_THUMBPRINT" -Force -ErrorAction SilentlyContinue
           }
