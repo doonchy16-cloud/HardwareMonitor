@@ -16,6 +16,8 @@ public sealed class HardwareMonitorService : IAsyncDisposable
 
     public event Action<HardwareSnapshot>? SnapshotUpdated;
 
+    public event Action<Exception>? Faulted;
+
     public TimeSpan PollInterval { get; set; }
 
     public bool IsRunning => _pollTask is { IsCompleted: false };
