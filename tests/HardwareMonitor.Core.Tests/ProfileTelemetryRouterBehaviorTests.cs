@@ -97,7 +97,7 @@ public sealed class ProfileTelemetryRouterBehaviorTests
     }
 
     [Fact]
-    public void Routed_snapshot_preserves_source_and_profile_metadata_for_later_presence_stage()
+    public void Routed_snapshot_preserves_bounded_source_and_profile_metadata_for_later_presence_stage()
     {
         const string deviceId = "device-alpha";
         var freshness = new FreshnessPolicy(TimeSpan.FromSeconds(7), TimeSpan.FromSeconds(31));
@@ -107,7 +107,7 @@ public sealed class ProfileTelemetryRouterBehaviorTests
             true,
             [new DeviceBinding(deviceId)],
             freshness: freshness);
-        var snapshot = new HardwareSnapshot(CapturedAt, [], "Degraded", "provider-error");
+        var snapshot = new HardwareSnapshot(CapturedAt, [], "Degraded", "InvalidOperationException: DO_NOT_LEAK_THIS_PATH");
 
         var routed = Assert.Single(ProfileTelemetryRouter.Route(deviceId, snapshot, Registry(profile)));
 
@@ -117,7 +117,6 @@ public sealed class ProfileTelemetryRouterBehaviorTests
         Assert.Equal(deviceId, routed.SourceDeviceId);
         Assert.Equal(CapturedAt, routed.CapturedAt);
         Assert.Equal("Degraded", routed.EngineStatus);
-        Assert.Equal("provider-error", routed.ErrorMessage);
         Assert.Same(freshness, routed.Freshness);
     }
 
