@@ -1,0 +1,33 @@
+name: Phase 6B PR test
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/HardwareMonitor.Agent/**'
+      - 'src/HardwareMonitor.Sensors/**'
+      - 'tests/HardwareMonitor.Sensors.Tests/**'
+      - '.github/workflows/phase6b-pr-test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  phase6b:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: 10.0.400
+      - name: Restore Sensors tests
+        run: dotnet restore tests/HardwareMonitor.Sensors.Tests/HardwareMonitor.Sensors.Tests.csproj
+      - name: Run Sensors tests
+        run: dotnet test tests/HardwareMonitor.Sensors.Tests/HardwareMonitor.Sensors.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=normal"
