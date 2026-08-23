@@ -78,13 +78,23 @@ public sealed class HardwareMonitorService : IAsyncDisposable
 
     private async Task PollLoopAsync(CancellationToken cancellationToken)
     {
-        while (!cancellationToken.IsCancellationRequested)
+        try
         {
-            var snapshot = await _provider.ReadAsync(cancellationToken).ConfigureAwait(false);
-            SnapshotUpdated?.Invoke(snapshot);
+            while (!cancellationToken.IsCancellationRequested)
+            {
+                var snapshot = await _provider.ReadAsync(cancellationToken).ConfigureAwait(false);
+                SnapshotUpdated?.Invoke(snapshot);
 
-            var delay = PollInterval <= TimeSpan.Zero ? TimeSpan.FromMilliseconds(250) : PollInterval;
-            await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+                var delay = PollInterval <= TimeSpan.Zero ? TimeSpan.FromMilliseconds(250) : PollInterval;
+                await Task.Delay(delay, cancellationToken).ConfigureAwait(false);
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _faulted?.Invoke(ex);
         }
     }
 }
