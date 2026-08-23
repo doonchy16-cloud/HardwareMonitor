@@ -19,7 +19,7 @@ public sealed class ProfileRegistryFileStoreTests
         {
             var store = new ProfileRegistryFileStore(Path.Combine(root, "profiles.json"));
 
-            var loaded = await store.LoadAsync();
+            var loaded = await store.LoadAsync(TestContext.Current.CancellationToken);
 
             Assert.Equal(ProfileContract.CurrentSchemaVersion, loaded.SchemaVersion);
             Assert.Empty(loaded.Profiles);
@@ -40,8 +40,8 @@ public sealed class ProfileRegistryFileStoreTests
             var store = new ProfileRegistryFileStore(path);
             var expected = new ProfileRegistryDocument(ProfileContract.CurrentSchemaVersion, [CreateProfile("Main-PC")]);
 
-            await store.SaveAsync(expected);
-            var loaded = await store.LoadAsync();
+            await store.SaveAsync(expected, TestContext.Current.CancellationToken);
+            var loaded = await store.LoadAsync(TestContext.Current.CancellationToken);
 
             Assert.True(File.Exists(path));
             Assert.Equal(expected, loaded);
@@ -61,11 +61,13 @@ public sealed class ProfileRegistryFileStoreTests
         {
             var path = Path.Combine(root, "profiles.json");
             var store = new ProfileRegistryFileStore(path);
-            await store.SaveAsync(new ProfileRegistryDocument(ProfileContract.CurrentSchemaVersion, [CreateProfile("Old")]));
+            await store.SaveAsync(
+                new ProfileRegistryDocument(ProfileContract.CurrentSchemaVersion, [CreateProfile("Old")]),
+                TestContext.Current.CancellationToken);
             var replacement = new ProfileRegistryDocument(ProfileContract.CurrentSchemaVersion, [CreateProfile("New")]);
 
-            await store.SaveAsync(replacement);
-            var loaded = await store.LoadAsync();
+            await store.SaveAsync(replacement, TestContext.Current.CancellationToken);
+            var loaded = await store.LoadAsync(TestContext.Current.CancellationToken);
 
             Assert.Equal(replacement, loaded);
             Assert.Single(loaded.Profiles);
@@ -85,10 +87,13 @@ public sealed class ProfileRegistryFileStoreTests
         try
         {
             var path = Path.Combine(root, "profiles.json");
-            await File.WriteAllTextAsync(path, "{ definitely-not-valid-json");
+            await File.WriteAllTextAsync(
+                path,
+                "{ definitely-not-valid-json",
+                TestContext.Current.CancellationToken);
             var store = new ProfileRegistryFileStore(path);
 
-            await Assert.ThrowsAsync<JsonException>(() => store.LoadAsync());
+            await Assert.ThrowsAsync<JsonException>(() => store.LoadAsync(TestContext.Current.CancellationToken));
         }
         finally
         {
