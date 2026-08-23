@@ -11,5 +11,6 @@
   </ItemGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\src\HardwareMonitor.Core\HardwareMonitor.Core.csproj" />
+    <ProjectReference Include="..\..\src\HardwareMonitor.Diagnostics\HardwareMonitor.Diagnostics.csproj" />
   </ItemGroup>
 </Project>

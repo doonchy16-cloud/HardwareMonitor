@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.19041.0</TargetFramework>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <UseWPF>true</UseWPF>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <PlatformTarget>x64</PlatformTarget>
+    <RootNamespace>TheSpark.HardwareMonitor.Setup</RootNamespace>
+    <AssemblyName>HardwareMonitor-Setup</AssemblyName>
+    <SelfContained>true</SelfContained>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <Resource Include="..\HardwareMonitor.App\Assets\AppIcon.png" Link="Assets\AppIcon.png" />
+    <ProjectReference Include="..\HardwareMonitor.Setup.Core\HardwareMonitor.Setup.Core.csproj" />
+  </ItemGroup>
+</Project>

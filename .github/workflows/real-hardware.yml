@@ -1,0 +1,127 @@
+name: Real Hardware Gate
+
+on:
+  push:
+    branches: [ main, build/v1 ]
+
+permissions:
+  contents: read
+  statuses: write
+
+concurrency:
+  group: real-hardware-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  announce:
+    name: Announce real hardware gate
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish pending hardware status
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $target = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          $body = @{ state = 'pending'; context = 'hardware-monitor/real'; description = 'Waiting for self-hosted Windows hardware gate'; target_url = $target } | ConvertTo-Json
+          Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' } -Body $body -ContentType 'application/json' | Out-Null
+
+  hardware:
+    name: Build, test, package, and probe real hardware
+    needs: announce
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: 10.0.400
+      - name: Runner info
+        shell: powershell
+        run: |
+          Write-Host "RUNNER_OS=$env:RUNNER_OS"
+          Write-Host "PROCESSOR_ARCHITECTURE=$env:PROCESSOR_ARCHITECTURE"
+          Write-Host "DOTNET_ROOT=$env:DOTNET_ROOT"
+          dotnet --info
+      - name: Restore solution
+        run: dotnet restore HardwareMonitor.sln
+      - name: Build solution
+        run: dotnet build HardwareMonitor.sln --configuration Release --no-restore
+      - name: Run unit tests
+        run: dotnet test --solution HardwareMonitor.sln --configuration Release --no-build --minimum-expected-tests 1
+      - name: Restore hardware smoke probe
+        run: dotnet restore tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj
+      - name: Probe actual hardware and temperatures
+        run: dotnet run --project tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj --configuration Release --no-restore
+      - name: Publish self-contained Windows app
+        run: dotnet publish src/HardwareMonitor.App/HardwareMonitor.App.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/portable --no-restore
+      - name: Verify published executable
+        shell: powershell
+        run: |
+          $exe = Join-Path $PWD 'artifacts/portable/HardwareMonitor.exe'
+          if (-not (Test-Path $exe)) { throw 'HardwareMonitor.exe was not published.' }
+          $item = Get-Item $exe
+          $hash = Get-FileHash $exe -Algorithm SHA256
+          Write-Host "PUBLISHED_EXE=$($item.Name)"
+          Write-Host "PUBLISHED_BYTES=$($item.Length)"
+          Write-Host "PUBLISHED_SHA256=$($hash.Hash)"
+      - name: Publish setup bootstrap
+        run: dotnet publish src/HardwareMonitor.Setup/HardwareMonitor.Setup.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/setup --no-restore
+      - name: Verify setup executable
+        shell: powershell
+        run: |
+          $exe = Join-Path $PWD 'artifacts/setup/HardwareMonitor-Setup.exe'
+          if (-not (Test-Path $exe)) { throw 'HardwareMonitor-Setup.exe was not published.' }
+          $item = Get-Item $exe
+          $hash = Get-FileHash $exe -Algorithm SHA256
+          Write-Host "SETUP_EXE=$($item.Name)"
+          Write-Host "SETUP_BYTES=$($item.Length)"
+          Write-Host "SETUP_SHA256=$($hash.Hash)"
+      - name: Build and validate unsigned MSIX
+        shell: powershell
+        run: ./packaging/Build-Msix.ps1 -Version 1.0.0.0 -Publisher 'CN=The Spark' -ReleaseTag v1.0.0
+      - name: Upload portable verification build
+        uses: actions/upload-artifact@v4
+        with:
+          name: HardwareMonitor-v1-portable-win-x64
+          path: artifacts/portable
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload setup verification build
+        uses: actions/upload-artifact@v4
+        with:
+          name: HardwareMonitor-v1-setup-win-x64
+          path: artifacts/setup
+          if-no-files-found: error
+          retention-days: 7
+      - name: Upload MSIX verification package
+        uses: actions/upload-artifact@v4
+        with:
+          name: HardwareMonitor-v1-msix-unsigned
+          path: |
+            artifacts/package/*.msix
+            artifacts/package/*.appinstaller
+          if-no-files-found: error
+          retention-days: 7
+
+  report:
+    name: Report real hardware gate
+    if: always()
+    needs: [announce, hardware]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Publish terminal hardware status
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          HARDWARE_RESULT: ${{ needs.hardware.result }}
+        run: |
+          $state = if ($env:HARDWARE_RESULT -eq 'success') { 'success' } else { 'failure' }
+          $description = if ($state -eq 'success') { 'Real Windows hardware, tests, and MSIX gate passed' } else { "Real Windows hardware/MSIX gate: $env:HARDWARE_RESULT" }
+          $target = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
+          $body = @{ state = $state; context = 'hardware-monitor/real'; description = $description; target_url = $target } | ConvertTo-Json
+          Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' } -Body $body -ContentType 'application/json' | Out-Null

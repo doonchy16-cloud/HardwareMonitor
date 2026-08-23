@@ -19,11 +19,13 @@ jobs:
       - uses: actions/setup-dotnet@v5
         with:
           dotnet-version: 10.0.400
-          cache: true
-          cache-dependency-path: '**/packages.lock.json'
-      - name: Restore
+      - name: Restore solution
         run: dotnet restore HardwareMonitor.sln
-      - name: Build
+      - name: Restore hardware smoke tool
+        run: dotnet restore tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj
+      - name: Build solution
         run: dotnet build HardwareMonitor.sln --configuration Release --no-restore
+      - name: Build hardware smoke tool
+        run: dotnet build tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj --configuration Release --no-restore
       - name: Test
-        run: dotnet test HardwareMonitor.sln --configuration Release --no-build --logger "trx;LogFileName=tests.trx"
+        run: dotnet test --solution HardwareMonitor.sln --configuration Release --no-build --minimum-expected-tests 1
