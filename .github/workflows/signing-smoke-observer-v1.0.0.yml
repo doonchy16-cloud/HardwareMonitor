@@ -1,0 +1,64 @@
+name: Signing Smoke Observer v1.0.0
+
+on:
+  push:
+    branches:
+      - release/v1.0.0-signing-observer
+
+permissions:
+  actions: read
+  contents: read
+  statuses: write
+
+jobs:
+  observe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Observe signing smoke run to terminal state
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TARGET_SMOKE_SHA: 8ebd3febb228fe8b41c5e78d558e99ab5f96408e
+        shell: bash
+        run: |
+          set -euo pipefail
+          status_url="repos/${GITHUB_REPOSITORY}/statuses/${GITHUB_SHA}"
+
+          post_status() {
+            state="$1"
+            target_url="$2"
+            description="$3"
+            jq -n --arg state "$state" --arg context 'hardware-monitor/signing-smoke-observer' --arg target_url "$target_url" --arg description "$description" '{state:$state,context:$context,target_url:$target_url,description:$description}' |
+              gh api --method POST "$status_url" --input - >/dev/null
+          }
+
+          for attempt in $(seq 1 36); do
+            runs="$(gh run list --repo "$GITHUB_REPOSITORY" --branch release/v1.0.0-signing-smoke --limit 20 --json databaseId,status,conclusion,headSha,url,name,event)"
+            run="$(printf '%s' "$runs" | jq -c --arg sha "$TARGET_SMOKE_SHA" '[.[] | select(.headSha == $sha)] | sort_by(.databaseId) | last // empty')"
+
+            if [ -n "$run" ]; then
+              run_id="$(printf '%s' "$run" | jq -r '.databaseId')"
+              run_status="$(printf '%s' "$run" | jq -r '.status')"
+              conclusion="$(printf '%s' "$run" | jq -r '.conclusion // ""')"
+              run_url="$(printf '%s' "$run" | jq -r '.url')"
+              echo "SMOKE_RUN_ID=$run_id status=$run_status conclusion=$conclusion"
+
+              if [ "$run_status" = "completed" ]; then
+                if [ "$conclusion" = "success" ]; then
+                  post_status success "$run_url" 'Signing pipeline smoke completed successfully'
+                  exit 0
+                fi
+                post_status failure "$run_url" "Signing pipeline smoke completed: $conclusion"
+                exit 1
+              fi
+
+              post_status pending "$run_url" "Signing pipeline smoke is $run_status"
+            else
+              post_status pending "https://github.com/${GITHUB_REPOSITORY}/actions" 'Waiting for signing pipeline smoke run to appear'
+            fi
+
+            sleep 10
+          done
+
+          post_status failure "https://github.com/${GITHUB_REPOSITORY}/actions" 'Signing pipeline smoke did not reach terminal state in time'
+          exit 1
