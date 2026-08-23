@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Globalization;
 using System.IO;
 using System.Reflection;
 using System.Text;
@@ -8,6 +9,7 @@ using TheSpark.HardwareMonitor.App.Services;
 using TheSpark.HardwareMonitor.App.ViewModels;
 using TheSpark.HardwareMonitor.Diagnostics;
 using TheSpark.HardwareMonitor.Sensors;
+using TheSpark.HardwareMonitor.Sensors.Agent;
 
 namespace TheSpark.HardwareMonitor.App.Pages;
 
@@ -20,25 +22,37 @@ public partial class SettingsPage : UserControl
     private readonly TelemetryViewModel _telemetry;
     private readonly RotatingDiagnosticLog _log;
     private readonly AppSettings _settings;
+    private readonly BackgroundAgentController _backgroundAgentController;
+    private AgentHealthSnapshot? _lastAgentHealth;
     private bool _initializing = true;
 
-    public SettingsPage(HardwareMonitorService monitorService, TelemetryViewModel telemetry, RotatingDiagnosticLog log, AppSettings settings)
+    public SettingsPage(
+        HardwareMonitorService monitorService,
+        TelemetryViewModel telemetry,
+        RotatingDiagnosticLog log,
+        AppSettings settings,
+        BackgroundAgentController backgroundAgentController)
     {
         InitializeComponent();
         _monitorService = monitorService;
         _telemetry = telemetry;
         _log = log;
         _settings = settings;
+        _backgroundAgentController = backgroundAgentController;
         DataContext = telemetry;
         TemperatureUnitCombo.SelectedIndex = settings.TemperatureUnit.Equals("Fahrenheit", StringComparison.OrdinalIgnoreCase) ? 1 : 0;
         MotionCombo.SelectedIndex = settings.Motion.Equals("Reduced", StringComparison.OrdinalIgnoreCase) ? 1 : settings.Motion.Equals("Off", StringComparison.OrdinalIgnoreCase) ? 2 : 0;
         PollCombo.SelectedIndex = settings.PollIntervalMilliseconds <= 500 ? 0 : settings.PollIntervalMilliseconds >= 2000 ? 2 : 1;
+        BackgroundAgentCheckBox.IsChecked = settings.StartBackgroundAgentWithDesktop;
         VersionText.Text = $"Version {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0"} · MSIX 1.0.0.0";
+        Loaded += SettingsPage_Loaded;
         _initializing = false;
     }
 
     public event Action<string>? ThemeChanged;
     public event Action<string>? TemperatureUnitChanged;
+
+    private async void SettingsPage_Loaded(object sender, RoutedEventArgs e) => await RefreshAgentStatusAsync();
 
     private void Theme_Click(object sender, RoutedEventArgs e)
     {
@@ -73,6 +87,113 @@ public partial class SettingsPage : UserControl
         SaveSettings();
     }
 
+    private async void BackgroundAgentCheckBox_Click(object sender, RoutedEventArgs e)
+    {
+        if (_initializing)
+        {
+            return;
+        }
+
+        _settings.StartBackgroundAgentWithDesktop = BackgroundAgentCheckBox.IsChecked == true;
+        SaveSettings();
+
+        if (_settings.StartBackgroundAgentWithDesktop)
+        {
+            await RunAgentActionAsync(
+                () => _backgroundAgentController.EnsureRunningAsync(CurrentPollInterval()),
+                "Background agent automatic start enabled.");
+        }
+        else
+        {
+            await _log.WriteAsync("INFO", "Background agent automatic start disabled.");
+            await RefreshAgentStatusAsync();
+        }
+    }
+
+    private async void RefreshAgent_Click(object sender, RoutedEventArgs e) => await RefreshAgentStatusAsync();
+
+    private async void RestartAgent_Click(object sender, RoutedEventArgs e) => await RunAgentActionAsync(
+        () => _backgroundAgentController.RestartOrStartAsync(CurrentPollInterval()),
+        "Background agent start/restart requested.");
+
+    private async Task RefreshAgentStatusAsync()
+    {
+        SetAgentButtonsEnabled(false);
+        try
+        {
+            var health = await _backgroundAgentController.GetHealthAsync();
+            ApplyAgentHealth(health);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _lastAgentHealth = null;
+            AgentStateText.Text = "Unavailable";
+            AgentDetailsText.Text = $"Local agent health could not be read ({ex.GetType().Name}).";
+        }
+        finally
+        {
+            SetAgentButtonsEnabled(true);
+        }
+    }
+
+    private async Task RunAgentActionAsync(Func<Task<AgentHealthSnapshot>> action, string logMessage)
+    {
+        SetAgentButtonsEnabled(false);
+        AgentStateText.Text = "Working…";
+        AgentDetailsText.Text = "Waiting for the current-user background agent.";
+
+        try
+        {
+            await _log.WriteAsync("INFO", logMessage);
+            var health = await action();
+            ApplyAgentHealth(health);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            _lastAgentHealth = null;
+            AgentStateText.Text = "Unavailable";
+            AgentDetailsText.Text = $"Background agent action failed ({ex.GetType().Name}).";
+            await _log.WriteAsync("WARN", $"Background agent action failed: {ex.GetType().Name}.");
+        }
+        finally
+        {
+            SetAgentButtonsEnabled(true);
+        }
+    }
+
+    private void ApplyAgentHealth(AgentHealthSnapshot? health)
+    {
+        _lastAgentHealth = health;
+        if (health is null)
+        {
+            AgentStateText.Text = "Not running";
+            AgentDetailsText.Text = _settings.StartBackgroundAgentWithDesktop
+                ? "No current-user background agent responded. Use Start / Restart Agent to retry."
+                : "Automatic start is disabled. No current-user background agent responded.";
+            return;
+        }
+
+        AgentStateText.Text = health.State.ToString();
+        var lastSnapshot = health.LastSnapshotAt.HasValue
+            ? health.LastSnapshotAt.Value.ToLocalTime().ToString("G", CultureInfo.CurrentCulture)
+            : "none yet";
+        var engine = health.SensorEngineRunning ? "running" : "stopped";
+        var registry = health.ProfileRegistryLoaded
+            ? $"loaded · {health.ProfileCount} profile(s)"
+            : "not loaded";
+        var error = string.IsNullOrWhiteSpace(health.LastError) ? string.Empty : $" · Fault: {health.LastError}";
+        AgentDetailsText.Text = $"Sensor engine: {engine} · Profile registry: {registry} · Last snapshot: {lastSnapshot}{error}";
+    }
+
+    private TimeSpan CurrentPollInterval() => TimeSpan.FromMilliseconds(_settings.PollIntervalMilliseconds);
+
+    private void SetAgentButtonsEnabled(bool enabled)
+    {
+        RefreshAgentButton.IsEnabled = enabled;
+        RestartAgentButton.IsEnabled = enabled;
+        BackgroundAgentCheckBox.IsEnabled = enabled;
+    }
+
     private async void RestartEngine_Click(object sender, RoutedEventArgs e)
     {
         await _log.WriteAsync("INFO", "Sensor engine restart requested.");
@@ -81,7 +202,25 @@ public partial class SettingsPage : UserControl
 
     private void CopyDiagnostics_Click(object sender, RoutedEventArgs e)
     {
-        var report = new StringBuilder().AppendLine("Hardware Monitor diagnostic report").AppendLine($"Version: {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0"}").AppendLine("Channel: stable").AppendLine($"Engine: {DiagnosticSanitizer.SanitizeValue(_telemetry.EngineStatus)}").AppendLine($"Devices: {_telemetry.DeviceCount}").AppendLine($"Sensors: {_telemetry.SensorCount}").AppendLine($"Last refresh: {_telemetry.LastRefresh:O}").AppendLine($"Log: {_log.CurrentLogPath}").ToString();
+        var agentState = _lastAgentHealth?.State.ToString() ?? "Unavailable";
+        var agentProfiles = _lastAgentHealth?.ProfileCount.ToString(CultureInfo.InvariantCulture) ?? "Unknown";
+        var agentLastSnapshot = _lastAgentHealth?.LastSnapshotAt?.ToString("O", CultureInfo.InvariantCulture) ?? "Unknown";
+        var agentFault = DiagnosticSanitizer.SanitizeValue(_lastAgentHealth?.LastError ?? string.Empty);
+
+        var report = new StringBuilder()
+            .AppendLine("Hardware Monitor diagnostic report")
+            .AppendLine($"Version: {Assembly.GetExecutingAssembly().GetName().Version?.ToString(3) ?? "1.0.0"}")
+            .AppendLine("Channel: stable")
+            .AppendLine($"Engine: {DiagnosticSanitizer.SanitizeValue(_telemetry.EngineStatus)}")
+            .AppendLine($"Devices: {_telemetry.DeviceCount}")
+            .AppendLine($"Sensors: {_telemetry.SensorCount}")
+            .AppendLine($"Last refresh: {_telemetry.LastRefresh:O}")
+            .AppendLine($"Background agent: {agentState}")
+            .AppendLine($"Background agent profiles: {agentProfiles}")
+            .AppendLine($"Background agent last snapshot: {agentLastSnapshot}")
+            .AppendLine($"Background agent fault: {agentFault}")
+            .AppendLine($"Log: {_log.CurrentLogPath}")
+            .ToString();
         Clipboard.SetText(report);
     }
 

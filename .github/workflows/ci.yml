@@ -23,9 +23,44 @@ jobs:
         run: dotnet restore HardwareMonitor.sln
       - name: Restore hardware smoke tool
         run: dotnet restore tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj
+      - name: Restore agent smoke tool
+        run: dotnet restore tools/HardwareMonitor.AgentSmoke/HardwareMonitor.AgentSmoke.csproj
       - name: Build solution
         run: dotnet build HardwareMonitor.sln --configuration Release --no-restore
       - name: Build hardware smoke tool
         run: dotnet build tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj --configuration Release --no-restore
+      - name: Build agent smoke tool
+        run: dotnet build tools/HardwareMonitor.AgentSmoke/HardwareMonitor.AgentSmoke.csproj --configuration Release --no-restore
       - name: Test
         run: dotnet test --solution HardwareMonitor.sln --configuration Release --no-build --minimum-expected-tests 1
+      - name: Publish standalone agent
+        run: dotnet publish src/HardwareMonitor.Agent/HardwareMonitor.Agent.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/agent --no-restore
+      - name: Probe standalone agent process and IPC
+        shell: powershell
+        run: |
+          $agentExe = Join-Path $PWD 'artifacts/agent/HardwareMonitor.Agent.exe'
+          if (-not (Test-Path $agentExe)) { throw 'HardwareMonitor.Agent.exe was not published.' }
+
+          $pipe = "HardwareMonitor.CI.$env:GITHUB_RUN_ID"
+          $profileRoot = Join-Path $env:RUNNER_TEMP "HardwareMonitor.CI.$env:GITHUB_RUN_ID"
+          $profilePath = Join-Path $profileRoot 'profiles.json'
+          New-Item -ItemType Directory -Path $profileRoot -Force | Out-Null
+
+          $agentProcess = Start-Process -FilePath $agentExe -ArgumentList @(
+            '--profile-path', $profilePath,
+            '--pipe', $pipe,
+            '--poll-ms', '250'
+          ) -PassThru
+
+          try {
+            dotnet run --project tools/HardwareMonitor.AgentSmoke/HardwareMonitor.AgentSmoke.csproj --configuration Release --no-build -- $pipe
+            if ($LASTEXITCODE -ne 0) { throw "Agent smoke failed with exit code $LASTEXITCODE." }
+            if (Test-Path $profilePath) { throw 'Agent process unexpectedly created or replaced the temporary profile registry.' }
+          }
+          finally {
+            if ($agentProcess -and -not $agentProcess.HasExited) {
+              Stop-Process -Id $agentProcess.Id -Force
+              $agentProcess.WaitForExit()
+            }
+            Remove-Item $profileRoot -Recurse -Force -ErrorAction SilentlyContinue
+          }
