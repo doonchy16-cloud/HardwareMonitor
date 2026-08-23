@@ -133,6 +133,24 @@ public sealed class GatewayTelemetryPublisherBehaviorTests : IDisposable
     }
 
     [Fact]
+    public async Task Http_rejection_reports_sanitized_status_code_without_response_body_or_credentials()
+    {
+        var deviceId = Guid.NewGuid().ToString();
+        var bridgeRoot = WriteBridgeFiles(deviceId);
+        var sequencePath = Path.Combine(_root, "state", "sequence.json");
+        var profileStore = await WritePublisherProfileAsync(deviceId);
+        var handler = new CaptureHandler(responseStatusCode: HttpStatusCode.BadRequest);
+        await using var publisher = new BridgeGatewayTelemetryPublisher(bridgeRoot, sequencePath, profileStore, handler);
+
+        var published = await publisher.PublishAsync(CreateSnapshot(), TestContext.Current.CancellationToken);
+
+        Assert.False(published);
+        Assert.Equal("HttpStatus400", publisher.Status.LastErrorCode);
+        Assert.DoesNotContain(TestToken, publisher.Status.ToString(), StringComparison.Ordinal);
+        Assert.DoesNotContain("simulated private gateway rejection", publisher.Status.ToString(), StringComparison.Ordinal);
+    }
+
+    [Fact]
     public async Task Start_and_queue_publish_in_background_without_blocking_sensor_event_caller()
     {
         var deviceId = Guid.NewGuid().ToString();
@@ -249,7 +267,9 @@ public sealed class GatewayTelemetryPublisherBehaviorTests : IDisposable
         }
     }
 
-    private sealed class CaptureHandler(bool throwOnSend = false) : HttpMessageHandler
+    private sealed class CaptureHandler(
+        bool throwOnSend = false,
+        HttpStatusCode responseStatusCode = HttpStatusCode.Accepted) : HttpMessageHandler
     {
         public int CallCount { get; private set; }
         public HttpMethod? LastMethod { get; private set; }
@@ -285,12 +305,12 @@ public sealed class GatewayTelemetryPublisherBehaviorTests : IDisposable
             }
 
             var acceptedSequence = Sequences.Count == 0 ? 0 : Sequences[^1];
-            return new HttpResponseMessage(HttpStatusCode.Accepted)
+            var responseBody = responseStatusCode == HttpStatusCode.Accepted
+                ? JsonSerializer.Serialize(new { ok = true, sequence = acceptedSequence })
+                : "simulated private gateway rejection";
+            return new HttpResponseMessage(responseStatusCode)
             {
-                Content = new StringContent(
-                    JsonSerializer.Serialize(new { ok = true, sequence = acceptedSequence }),
-                    Encoding.UTF8,
-                    "application/json"),
+                Content = new StringContent(responseBody, Encoding.UTF8, "application/json"),
             };
         }
     }
