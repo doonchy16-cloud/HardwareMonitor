@@ -57,17 +57,19 @@ jobs:
 
           $cert = $request.CreateSelfSigned((Get-Date).AddMinutes(-5), (Get-Date).AddDays(7))
           $pfxPath = Join-Path $env:RUNNER_TEMP 'hardwaremonitor-test-signing.pfx'
+          $cerPath = Join-Path $env:RUNNER_TEMP 'hardwaremonitor-test-signing.cer'
           [System.IO.File]::WriteAllBytes($pfxPath, $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $passwordPlain))
+          [System.IO.File]::WriteAllBytes($cerPath, $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
 
-          $rootStore = [System.Security.Cryptography.X509Certificates.X509Store]::new('Root', [System.Security.Cryptography.X509Certificates.StoreLocation]::CurrentUser)
-          $rootStore.Open([System.Security.Cryptography.X509Certificates.OpenFlags]::ReadWrite)
-          try { $rootStore.Add($cert) } finally { $rootStore.Close() }
+          & certutil.exe -user -f -addstore Root $cerPath
+          if ($LASTEXITCODE -ne 0) { throw "certutil failed to trust the ephemeral test certificate: $LASTEXITCODE" }
 
           "TEST_PFX_PATH=$pfxPath" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "TEST_CER_PATH=$cerPath" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "TEST_PFX_PASSWORD=$passwordPlain" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "TEST_PUBLISHER=$($cert.Subject)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "TEST_CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "Ephemeral test signing certificate created: $($cert.Subject)"
+          Write-Host "Ephemeral test signing certificate created and trusted: $($cert.Subject)"
 
       - name: Restore solution
         run: dotnet restore HardwareMonitor.sln
@@ -130,7 +132,8 @@ jobs:
         if: always()
         shell: pwsh
         run: |
-          Remove-Item $env:TEST_PFX_PATH -Force -ErrorAction SilentlyContinue
           if (-not [string]::IsNullOrWhiteSpace($env:TEST_CERT_THUMBPRINT)) {
-            Remove-Item "Cert:\CurrentUser\Root\$env:TEST_CERT_THUMBPRINT" -Force -ErrorAction SilentlyContinue
+            & certutil.exe -user -delstore Root $env:TEST_CERT_THUMBPRINT | Out-Null
           }
+          Remove-Item $env:TEST_PFX_PATH -Force -ErrorAction SilentlyContinue
+          Remove-Item $env:TEST_CER_PATH -Force -ErrorAction SilentlyContinue
