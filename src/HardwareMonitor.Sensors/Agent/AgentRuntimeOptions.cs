@@ -5,7 +5,9 @@ namespace TheSpark.HardwareMonitor.Sensors.Agent;
 public sealed record AgentRuntimeOptions(
     string ProfilePath,
     string PipeName,
-    TimeSpan PollInterval)
+    TimeSpan PollInterval,
+    string? BridgeRoot,
+    string TelemetrySequencePath)
 {
     private const int MinimumPollMilliseconds = 250;
     private const int MaximumPollMilliseconds = 60_000;
@@ -19,9 +21,11 @@ public sealed record AgentRuntimeOptions(
             throw new ArgumentException("Local application data path cannot be blank.", nameof(localAppData));
         }
 
-        var profilePath = Path.Combine(localAppData.Trim(), "The Spark", "Hardware Monitor", "profiles.json");
+        var appDataRoot = Path.Combine(localAppData.Trim(), "The Spark", "Hardware Monitor");
+        var profilePath = Path.Combine(appDataRoot, "profiles.json");
         var pipeName = AgentIpcProtocol.DefaultPipeName;
         var pollMilliseconds = DefaultPollMilliseconds;
+        string? bridgeRoot = null;
 
         for (var index = 0; index < args.Count; index++)
         {
@@ -68,6 +72,15 @@ public sealed record AgentRuntimeOptions(
                     }
                     break;
 
+                case "--bridge-root":
+                    if (string.IsNullOrWhiteSpace(value))
+                    {
+                        throw new ArgumentException("Bridge root cannot be blank.", nameof(args));
+                    }
+
+                    bridgeRoot = Path.GetFullPath(value.Trim());
+                    break;
+
                 default:
                     throw new ArgumentException($"Unknown agent option '{option}'.", nameof(args));
             }
@@ -76,6 +89,8 @@ public sealed record AgentRuntimeOptions(
         return new AgentRuntimeOptions(
             Path.GetFullPath(profilePath),
             pipeName,
-            TimeSpan.FromMilliseconds(pollMilliseconds));
+            TimeSpan.FromMilliseconds(pollMilliseconds),
+            bridgeRoot,
+            Path.GetFullPath(Path.Combine(appDataRoot, "gateway-telemetry-sequence.json")));
     }
 }
