@@ -1,5 +1,7 @@
 using System.Runtime.InteropServices;
 using TheSpark.HardwareMonitor.Core.Models;
+using TheSpark.HardwareMonitor.Core.Profiles;
+using TheSpark.HardwareMonitor.Core.Profiles.Telemetry;
 using TheSpark.HardwareMonitor.Platform.Windows;
 using TheSpark.HardwareMonitor.Sensors;
 
@@ -57,5 +59,46 @@ if (temperatureSensors == 0)
     return 40;
 }
 
+const string gateDeviceId = "hardware-monitor-real-gate";
+var gateProfile = new MonitoringProfile(
+    Guid.NewGuid(),
+    "Real Hardware Gate",
+    true,
+    ProfileRole.Publisher | ProfileRole.TrainingMonitor,
+    [new DeviceBinding(gateDeviceId)],
+    ViewerScope.AllProfiles(),
+    new FreshnessPolicy(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(20)),
+    new ThermalPolicy(80, 92),
+    new SensorVisibilityPolicy(UnavailableSensorBehavior.ShowUnavailable));
+var gateRegistry = new ProfileRegistryDocument(ProfileContract.CurrentSchemaVersion, [gateProfile]);
+var routedProfiles = ProfileTelemetryRouter.Route(gateDeviceId, snapshot, gateRegistry);
+
+if (routedProfiles.Count != 1)
+{
+    Console.Error.WriteLine($"PROFILE_ROUTING_FAIL: expected one routed profile, got {routedProfiles.Count}.");
+    return 50;
+}
+
+var routed = routedProfiles[0];
+var routedSensorCount = routed.Devices.Sum(device => device.Sensors.Count);
+var routedTemperatureSensors = routed.Devices
+    .SelectMany(device => device.Sensors)
+    .Count(sensor => sensor.Kind == SensorKind.Temperature && sensor.Availability == SensorAvailability.Available);
+
+Console.WriteLine($"ROUTED_PROFILE_COUNT={routedProfiles.Count}");
+Console.WriteLine($"ROUTED_SENSOR_COUNT={routedSensorCount}");
+Console.WriteLine($"ROUTED_TEMPERATURE_SENSOR_COUNT={routedTemperatureSensors}");
+
+if (routed.ProfileId != gateProfile.Id
+    || !string.Equals(routed.SourceDeviceId, gateDeviceId, StringComparison.Ordinal)
+    || routed.CapturedAt != snapshot.CapturedAt
+    || routedSensorCount != sensorCount
+    || routedTemperatureSensors != temperatureSensors)
+{
+    Console.Error.WriteLine("PROFILE_ROUTING_FAIL: routed telemetry did not preserve the real snapshot/profile contract.");
+    return 60;
+}
+
+Console.WriteLine("PROFILE_ROUTING_PASS");
 Console.WriteLine("HARDWARE_SMOKE_PASS");
 return 0;
