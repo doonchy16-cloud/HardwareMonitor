@@ -90,6 +90,13 @@
                             <TextBlock Text="Viewer scope" Margin="0,14,0,5"/>
                             <ComboBox x:Name="ViewerScopeBox" Padding="8,6"/>
 
+                            <StackPanel x:Name="SelectedProfilesPanel" Visibility="Collapsed" Margin="0,12,0,0">
+                                <TextBlock Text="Visible profiles" Margin="0,0,0,5"/>
+                                <TextBlock Text="Choose the profiles this viewer can see. All Profiles requires no list and stays dynamic."
+                                           Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,7"/>
+                                <ListBox x:Name="VisibleProfilesList" SelectionMode="Multiple" MaxHeight="140"/>
+                            </StackPanel>
+
                             <Grid Margin="0,14,0,0">
                                 <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="14"/><ColumnDefinition/></Grid.ColumnDefinitions>
                                 <StackPanel>
