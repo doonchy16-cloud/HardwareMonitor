@@ -1,24 +1,42 @@
 namespace TheSpark.HardwareMonitor.Core.Devices;
 
-public sealed record DeviceRecord(
-    Guid DeviceId,
-    string UserAlias,
-    DevicePlatform Platform,
-    string Architecture,
-    DateTimeOffset? LastHeartbeatAt,
-    DateTimeOffset? LastTelemetryAt)
+public sealed class DeviceRecord
 {
-    public DeviceRecord : this(
-        DeviceId,
-        string.IsNullOrWhiteSpace(UserAlias) ? throw new ArgumentException("Device alias must not be empty.", nameof(UserAlias)) : UserAlias.Trim(),
-        Platform,
-        string.IsNullOrWhiteSpace(Architecture) ? throw new ArgumentException("Architecture must not be empty.", nameof(Architecture)) : Architecture.Trim(),
-        LastHeartbeatAt,
-        LastTelemetryAt)
+    public DeviceRecord(
+        Guid deviceId,
+        string userAlias,
+        DevicePlatform platform,
+        string architecture,
+        DateTimeOffset? lastHeartbeatAt,
+        DateTimeOffset? lastTelemetryAt)
     {
-        if (DeviceId == Guid.Empty)
+        if (deviceId == Guid.Empty)
         {
-            throw new ArgumentException("Device ID must not be empty.", nameof(DeviceId));
+            throw new ArgumentException("Device ID must not be empty.", nameof(deviceId));
         }
+
+        if (string.IsNullOrWhiteSpace(userAlias))
+        {
+            throw new ArgumentException("Device alias must not be empty.", nameof(userAlias));
+        }
+
+        if (string.IsNullOrWhiteSpace(architecture))
+        {
+            throw new ArgumentException("Architecture must not be empty.", nameof(architecture));
+        }
+
+        DeviceId = deviceId;
+        UserAlias = userAlias.Trim();
+        Platform = platform;
+        Architecture = architecture.Trim();
+        LastHeartbeatAt = lastHeartbeatAt;
+        LastTelemetryAt = lastTelemetryAt;
     }
+
+    public Guid DeviceId { get; }
+    public string UserAlias { get; }
+    public DevicePlatform Platform { get; }
+    public string Architecture { get; }
+    public DateTimeOffset? LastHeartbeatAt { get; }
+    public DateTimeOffset? LastTelemetryAt { get; }
 }
