@@ -59,6 +59,29 @@ public sealed class ProfilesViewModelTests
     }
 
     [Fact]
+    public async Task Toggle_enabled_preserves_custom_thermal_policy()
+    {
+        var repository = new FakeProfileRepository(ProfileRegistrySnapshot.Empty);
+        var viewModel = new ProfilesViewModel(repository);
+        await viewModel.LoadAsync();
+
+        var editor = viewModel.CreateEditor();
+        editor.Name = "Custom thermal profile";
+        editor.WarmCelsius = 74;
+        editor.HotCelsius = 84;
+        editor.CriticalCelsius = 91;
+        await viewModel.SaveEditorAsync(editor);
+        var created = Assert.Single(viewModel.Profiles);
+
+        await viewModel.SetEnabledAsync(created.ProfileId, false);
+
+        var toggled = Assert.Single(viewModel.Profiles);
+        Assert.Equal(74, toggled.ThermalThresholdPolicy.WarmCelsius);
+        Assert.Equal(84, toggled.ThermalThresholdPolicy.HotCelsius);
+        Assert.Equal(91, toggled.ThermalThresholdPolicy.CriticalCelsius);
+    }
+
+    [Fact]
     public async Task Capability_toggles_and_viewer_scope_round_trip_through_repository()
     {
         var repository = new FakeProfileRepository(ProfileRegistrySnapshot.Empty);
