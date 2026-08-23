@@ -27,7 +27,12 @@ public partial class MainWindow : Window
     private bool _drawerOpen;
     private HardwareSnapshot? _lastSnapshot;
 
-    public MainWindow(HardwareMonitorService monitorService, SystemInventoryProvider inventoryProvider, RotatingDiagnosticLog log, AppSettings settings)
+    public MainWindow(
+        HardwareMonitorService monitorService,
+        SystemInventoryProvider inventoryProvider,
+        RotatingDiagnosticLog log,
+        AppSettings settings,
+        BackgroundAgentController backgroundAgentController)
     {
         InitializeComponent();
         _monitorService = monitorService;
@@ -49,7 +54,7 @@ public partial class MainWindow : Window
         var sensors = new SensorsPage { DataContext = _telemetry };
         var hardware = new HardwarePage { DataContext = _hardware };
         var profiles = new ProfilesPage();
-        var settingsPage = new SettingsPage(_monitorService, _telemetry, _log, _settings);
+        var settingsPage = new SettingsPage(_monitorService, _telemetry, _log, _settings, backgroundAgentController);
         settingsPage.TemperatureUnitChanged += value =>
         {
             _telemetry.TemperatureUnit = value;
