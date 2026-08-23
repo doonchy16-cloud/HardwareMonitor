@@ -47,7 +47,7 @@ public sealed class BackgroundAgentBehaviorTests
         {
             var profilePath = Path.Combine(tempDirectory, "profiles.json");
             const string corruptJson = "{ this is not valid profile json";
-            await File.WriteAllTextAsync(profilePath, corruptJson);
+            await File.WriteAllTextAsync(profilePath, corruptJson, TestContext.Current.CancellationToken);
             var provider = new SnapshotProvider();
             var service = new HardwareMonitorService(provider, TimeSpan.FromMilliseconds(10));
             await using var agent = new BackgroundHardwareAgent(service, new ProfileRegistryFileStore(profilePath));
@@ -58,7 +58,7 @@ public sealed class BackgroundAgentBehaviorTests
             Assert.False(agent.Health.SensorEngineRunning);
             Assert.False(agent.Health.ProfileRegistryLoaded);
             Assert.Equal(0, provider.ReadCount);
-            Assert.Equal(corruptJson, await File.ReadAllTextAsync(profilePath));
+            Assert.Equal(corruptJson, await File.ReadAllTextAsync(profilePath, TestContext.Current.CancellationToken));
             Assert.False(string.IsNullOrWhiteSpace(agent.Health.LastError));
         }
         finally
@@ -100,7 +100,7 @@ public sealed class BackgroundAgentBehaviorTests
         service.Faulted += exception => faulted.TrySetResult(exception);
 
         await service.StartAsync();
-        var exception = await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        var exception = await faulted.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
 
         Assert.IsType<InvalidOperationException>(exception);
         await WaitUntilAsync(() => !service.IsRunning, TimeSpan.FromSeconds(2));
@@ -129,7 +129,7 @@ public sealed class BackgroundAgentBehaviorTests
             Assert.Equal(AgentLifecycleState.Running, before.State);
             Assert.NotNull(before.StartedAt);
 
-            await Task.Delay(20);
+            await Task.Delay(20, TestContext.Current.CancellationToken);
             await client.RestartAsync();
             var after = await client.GetHealthAsync();
 
@@ -162,7 +162,7 @@ public sealed class BackgroundAgentBehaviorTests
                 return;
             }
 
-            await Task.Delay(10);
+            await Task.Delay(10, TestContext.Current.CancellationToken);
         }
 
         Assert.True(predicate(), "Condition did not become true before the timeout.");
