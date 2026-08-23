@@ -1,6 +1,9 @@
+using System.IO;
 using System.Threading;
 using System.Windows;
 using TheSpark.HardwareMonitor.App.Services;
+using TheSpark.HardwareMonitor.App.ViewModels;
+using TheSpark.HardwareMonitor.Core.Profiles;
 using TheSpark.HardwareMonitor.Diagnostics;
 using TheSpark.HardwareMonitor.Platform.Windows;
 using TheSpark.HardwareMonitor.Sensors;
@@ -44,7 +47,12 @@ public partial class App : Application
         _monitorService = new HardwareMonitorService(provider, TimeSpan.FromMilliseconds(settings.PollIntervalMilliseconds));
         var inventoryProvider = new SystemInventoryProvider();
 
-        var window = new MainWindow(_monitorService, inventoryProvider, _log, settings);
+        var appDataDirectory = Path.GetDirectoryName(SettingsService.SettingsPath)
+            ?? throw new InvalidOperationException("Hardware Monitor settings path has no parent directory.");
+        var profileRepository = new JsonProfileRepository(Path.Combine(appDataDirectory, "profiles.json"));
+        var profilesViewModel = new ProfilesViewModel(profileRepository);
+
+        var window = new MainWindow(_monitorService, inventoryProvider, _log, settings, profilesViewModel);
         MainWindow = window;
         window.Show();
 

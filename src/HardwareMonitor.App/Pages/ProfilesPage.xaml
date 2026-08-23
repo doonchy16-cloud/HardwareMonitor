@@ -1,0 +1,169 @@
+<UserControl x:Class="TheSpark.HardwareMonitor.App.Pages.ProfilesPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Grid Background="{DynamicResource WindowBackground}">
+        <Grid Margin="28">
+            <Grid.RowDefinitions>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition Height="Auto"/>
+                <RowDefinition/>
+            </Grid.RowDefinitions>
+
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel>
+                    <TextBlock Text="Profiles" FontSize="28" FontWeight="SemiBold"/>
+                    <TextBlock Text="Create exactly the monitoring profiles you want. Nothing is built in."
+                               Margin="0,6,0,0" Foreground="{DynamicResource MutedTextBrush}"/>
+                </StackPanel>
+                <Button Grid.Column="1" Content="＋  Add Profile" Padding="18,10" Click="AddProfile_Click"/>
+            </Grid>
+
+            <TextBlock x:Name="ErrorText" Grid.Row="1" Margin="0,14,0,0"
+                       Foreground="{DynamicResource CriticalBrush}" TextWrapping="Wrap"/>
+
+            <Grid Grid.Row="2" Margin="0,20,0,0">
+                <TextBlock x:Name="EmptyState" Text="No profiles yet. Choose Add Profile to create your first one."
+                           Foreground="{DynamicResource MutedTextBrush}" FontSize="16"
+                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <ItemsControl ItemsSource="{Binding Profiles}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{DynamicResource SurfaceBrush}"
+                                        BorderBrush="{DynamicResource BorderBrush}" BorderThickness="1"
+                                        CornerRadius="12" Padding="18" Margin="0,0,0,12">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel>
+                                            <TextBlock Text="{Binding Name}" FontSize="18" FontWeight="SemiBold"/>
+                                            <StackPanel Orientation="Horizontal" Margin="0,8,0,0">
+                                                <TextBlock Text="Enabled: " Foreground="{DynamicResource MutedTextBrush}"/>
+                                                <TextBlock Text="{Binding Enabled}"/>
+                                                <TextBlock Text="   Viewer: " Foreground="{DynamicResource MutedTextBrush}"/>
+                                                <TextBlock Text="{Binding ViewerScope}"/>
+                                                <TextBlock Text="   Revision: " Foreground="{DynamicResource MutedTextBrush}"/>
+                                                <TextBlock Text="{Binding Revision}"/>
+                                            </StackPanel>
+                                            <TextBlock Margin="0,5,0,0" Foreground="{DynamicResource MutedTextBrush}">
+                                                <Run Text="Stale after "/><Run Text="{Binding FreshnessPolicy.StaleAfter.TotalSeconds}"/><Run Text="s · Offline after "/><Run Text="{Binding FreshnessPolicy.OfflineAfter.TotalSeconds}"/><Run Text="s"/>
+                                            </TextBlock>
+                                            <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource MutedTextBrush}">
+                                                <Run Text="Thermal: Warm "/><Run Text="{Binding ThermalThresholdPolicy.WarmCelsius}"/><Run Text="°C · Hot "/><Run Text="{Binding ThermalThresholdPolicy.HotCelsius}"/><Run Text="°C · Critical "/><Run Text="{Binding ThermalThresholdPolicy.CriticalCelsius}"/><Run Text="°C"/>
+                                            </TextBlock>
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                                            <Button Content="Edit" Tag="{Binding ProfileId}" Padding="12,7" Margin="0,0,8,0" Click="EditProfile_Click"/>
+                                            <Button Content="Toggle enabled" Tag="{Binding ProfileId}" Padding="12,7" Margin="0,0,8,0" Click="ToggleProfile_Click"/>
+                                            <Button Content="Delete" Tag="{Binding ProfileId}" Padding="12,7" Click="DeleteProfile_Click"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </ScrollViewer>
+
+                <Border x:Name="EditorPanel" Visibility="Collapsed" Width="430" HorizontalAlignment="Right"
+                        Background="{DynamicResource SurfaceBrush}" BorderBrush="{DynamicResource BorderBrush}"
+                        BorderThickness="1" CornerRadius="14" Padding="22" Panel.ZIndex="20">
+                    <ScrollViewer VerticalScrollBarVisibility="Auto">
+                        <StackPanel>
+                            <Grid>
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                <TextBlock x:Name="EditorTitle" Text="Profile" FontSize="22" FontWeight="SemiBold"/>
+                                <Button Grid.Column="1" Content="✕" Width="34" Height="30" Click="CancelEditor_Click"/>
+                            </Grid>
+
+                            <TextBlock Text="Name" Margin="0,18,0,5"/>
+                            <TextBox x:Name="NameBox" Padding="9,7" MaxLength="120"/>
+
+                            <TextBlock Text="Device ID (optional)" Margin="0,14,0,5"/>
+                            <TextBox x:Name="DeviceIdBox" Padding="9,7"/>
+
+                            <CheckBox x:Name="EnabledCheck" Content="Enabled" Margin="0,14,0,0"/>
+
+                            <TextBlock Text="Viewer scope" Margin="0,14,0,5"/>
+                            <ComboBox x:Name="ViewerScopeBox" Padding="8,6"/>
+
+                            <StackPanel x:Name="SelectedProfilesPanel" Visibility="Collapsed" Margin="0,12,0,0">
+                                <TextBlock Text="Visible profiles" Margin="0,0,0,5"/>
+                                <TextBlock Text="Choose the profiles this viewer can see. All Profiles requires no list and stays dynamic."
+                                           Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,7"/>
+                                <ListBox x:Name="VisibleProfilesList" SelectionMode="Multiple" MaxHeight="140"/>
+                            </StackPanel>
+
+                            <Grid Margin="0,14,0,0">
+                                <Grid.ColumnDefinitions><ColumnDefinition/><ColumnDefinition Width="14"/><ColumnDefinition/></Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Stale after (seconds)" Margin="0,0,0,5"/>
+                                    <TextBox x:Name="StaleBox" Padding="9,7"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Offline after (seconds)" Margin="0,0,0,5"/>
+                                    <TextBox x:Name="OfflineBox" Padding="9,7"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="Thermal alerts (°C)" Margin="0,18,0,7" FontWeight="SemiBold"/>
+                            <TextBlock Text="Set this profile's warning levels. They must increase from Warm to Hot to Critical."
+                                       Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Warm" Margin="0,0,0,5"/>
+                                    <TextBox x:Name="WarmBox" Padding="9,7"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Hot" Margin="0,0,0,5"/>
+                                    <TextBox x:Name="HotBox" Padding="9,7"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="4">
+                                    <TextBlock Text="Critical" Margin="0,0,0,5"/>
+                                    <TextBox x:Name="CriticalBox" Padding="9,7"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="Capabilities" Margin="0,18,0,7" FontWeight="SemiBold"/>
+                            <UniformGrid Columns="2">
+                                <CheckBox x:Name="ViewProfilesCheck" Content="View profiles" Margin="0,4"/>
+                                <CheckBox x:Name="PublishHardwareCheck" Content="Publish hardware" Margin="0,4"/>
+                                <CheckBox x:Name="PublishPresenceCheck" Content="Publish presence" Margin="0,4"/>
+                                <CheckBox x:Name="LimitedTelemetryCheck" Content="Limited client telemetry" Margin="0,4"/>
+                                <CheckBox x:Name="TrainingModeCheck" Content="Training mode" Margin="0,4"/>
+                                <CheckBox x:Name="ManageProfilesCheck" Content="Manage profiles" Margin="0,4"/>
+                                <CheckBox x:Name="ManageDevicesCheck" Content="Manage devices" Margin="0,4"/>
+                                <CheckBox x:Name="ManageAlertsCheck" Content="Manage alerts" Margin="0,4"/>
+                                <CheckBox x:Name="ManageRemoteAccessCheck" Content="Manage remote access" Margin="0,4"/>
+                                <CheckBox x:Name="NotificationsCheck" Content="Notifications" Margin="0,4"/>
+                                <CheckBox x:Name="DiagnosticsCheck" Content="Diagnostics" Margin="0,4"/>
+                                <CheckBox x:Name="HistoryCheck" Content="History" Margin="0,4"/>
+                            </UniformGrid>
+
+                            <TextBlock x:Name="ValidationText" Margin="0,14,0,0"
+                                       Foreground="{DynamicResource CriticalBrush}" TextWrapping="Wrap"/>
+
+                            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Margin="0,18,0,0">
+                                <Button Content="Cancel" Padding="16,9" Margin="0,0,8,0" Click="CancelEditor_Click"/>
+                                <Button Content="Save Profile" Padding="18,9" Click="SaveProfile_Click"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </ScrollViewer>
+                </Border>
+            </Grid>
+        </Grid>
+    </Grid>
+</UserControl>
