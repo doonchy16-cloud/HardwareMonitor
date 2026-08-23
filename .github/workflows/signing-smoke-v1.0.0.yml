@@ -1,0 +1,132 @@
+name: Signing Smoke v1.0.0
+
+on:
+  push:
+    branches:
+      - release/v1.0.0-signing-smoke
+
+permissions:
+  contents: read
+  statuses: write
+
+env:
+  TARGET_SHA: 2170b36a981f743f0edc7a75dd2336c597d12a81
+  TIMESTAMP_URL: http://timestamp.digicert.com
+
+jobs:
+  signing-smoke:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - name: Publish pending status
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $payload = @{ state='pending'; context='hardware-monitor/signing-pipeline-smoke'; description='Testing MSIX and Setup signing pipeline with ephemeral test certificate' } | ConvertTo-Json -Compress
+          $payload | gh api --method POST "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" --input - | Out-Null
+
+      - name: Checkout authoritative main candidate
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TARGET_SHA }}
+          fetch-depth: 0
+
+      - name: Setup .NET 10
+        uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.400
+
+      - name: Create ephemeral test signing certificate
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $passwordPlain = [guid]::NewGuid().ToString('N')
+          $password = ConvertTo-SecureString $passwordPlain -AsPlainText -Force
+          $cert = New-SelfSignedCertificate `
+            -Subject 'CN=The Spark Test Signing' `
+            -Type CodeSigningCert `
+            -KeyAlgorithm RSA `
+            -KeyLength 3072 `
+            -HashAlgorithm SHA256 `
+            -CertStoreLocation 'Cert:\CurrentUser\My' `
+            -NotAfter (Get-Date).AddDays(7)
+
+          $pfxPath = Join-Path $env:RUNNER_TEMP 'hardwaremonitor-test-signing.pfx'
+          Export-PfxCertificate -Cert $cert -FilePath $pfxPath -Password $password | Out-Null
+          $cerPath = Join-Path $env:RUNNER_TEMP 'hardwaremonitor-test-signing.cer'
+          Export-Certificate -Cert $cert -FilePath $cerPath | Out-Null
+          Import-Certificate -FilePath $cerPath -CertStoreLocation 'Cert:\CurrentUser\Root' | Out-Null
+
+          "TEST_PFX_PATH=$pfxPath" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "TEST_PFX_PASSWORD=$passwordPlain" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "TEST_PUBLISHER=$($cert.Subject)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+          "TEST_CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+
+      - name: Restore solution
+        run: dotnet restore HardwareMonitor.sln
+
+      - name: Build solution
+        run: dotnet build HardwareMonitor.sln --configuration Release --no-restore
+
+      - name: Run tests
+        run: dotnet test --solution HardwareMonitor.sln --configuration Release --no-build --minimum-expected-tests 1
+
+      - name: Build signed and timestamped MSIX with test certificate
+        shell: pwsh
+        run: |
+          ./packaging/Build-Msix.ps1 `
+            -Version '1.0.0.0' `
+            -Publisher $env:TEST_PUBLISHER `
+            -ReleaseTag 'v1.0.0' `
+            -CertificatePath $env:TEST_PFX_PATH `
+            -CertificatePassword $env:TEST_PFX_PASSWORD `
+            -TimestampUrl $env:TIMESTAMP_URL
+
+      - name: Publish setup bootstrap
+        run: dotnet publish src/HardwareMonitor.Setup/HardwareMonitor.Setup.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/setup --no-restore
+
+      - name: Sign and verify setup bootstrap with test certificate
+        shell: pwsh
+        run: |
+          $kitsBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
+          $signTool = Get-ChildItem $kitsBin -Filter SignTool.exe -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\SignTool\.exe$' } |
+            Sort-Object { try { [version]$_.Directory.Parent.Name } catch { [version]'0.0' } } -Descending |
+            Select-Object -First 1
+          if (-not $signTool) { throw 'SignTool.exe was not found.' }
+
+          $setupExe = Join-Path $PWD 'artifacts/setup/HardwareMonitor-Setup.exe'
+          & $signTool.FullName sign /fd SHA256 /a /f $env:TEST_PFX_PATH /p $env:TEST_PFX_PASSWORD /tr $env:TIMESTAMP_URL /td SHA256 $setupExe
+          if ($LASTEXITCODE -ne 0) { throw "Setup signing failed with exit code $LASTEXITCODE." }
+          & $signTool.FullName verify /pa /v $setupExe
+          if ($LASTEXITCODE -ne 0) { throw "Setup signature verification failed with exit code $LASTEXITCODE." }
+
+      - name: Publish terminal success status
+        if: success()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $payload = @{ state='success'; context='hardware-monitor/signing-pipeline-smoke'; description='MSIX and Setup signing pipeline passed with ephemeral test certificate' } | ConvertTo-Json -Compress
+          $payload | gh api --method POST "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" --input - | Out-Null
+
+      - name: Publish terminal failure status
+        if: failure()
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $payload = @{ state='failure'; context='hardware-monitor/signing-pipeline-smoke'; description='MSIX or Setup signing pipeline failed during smoke test' } | ConvertTo-Json -Compress
+          $payload | gh api --method POST "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" --input - | Out-Null
+
+      - name: Remove ephemeral test signing material
+        if: always()
+        shell: pwsh
+        run: |
+          Remove-Item $env:TEST_PFX_PATH -Force -ErrorAction SilentlyContinue
+          Remove-Item (Join-Path $env:RUNNER_TEMP 'hardwaremonitor-test-signing.cer') -Force -ErrorAction SilentlyContinue
+          if (-not [string]::IsNullOrWhiteSpace($env:TEST_CERT_THUMBPRINT)) {
+            Remove-Item "Cert:\CurrentUser\My\$env:TEST_CERT_THUMBPRINT" -Force -ErrorAction SilentlyContinue
+            Remove-Item "Cert:\CurrentUser\Root\$env:TEST_CERT_THUMBPRINT" -Force -ErrorAction SilentlyContinue
+          }
