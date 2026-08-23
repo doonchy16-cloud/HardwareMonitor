@@ -162,10 +162,10 @@ public sealed record MonitoringProfile
     private string _displayName = string.Empty;
     private ProfileRole _roles;
     private IReadOnlyList<DeviceBinding> _deviceBindings = Array.Empty<DeviceBinding>();
-    private ViewerScope _viewerScope = Profiles.ViewerScope.AllProfiles();
-    private FreshnessPolicy _freshness = new(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(20));
-    private ThermalPolicy _thermal = new(80, 92);
-    private SensorVisibilityPolicy _sensorVisibility = new(UnavailableSensorBehavior.Hide);
+    private ViewerScope _viewerScope = null!;
+    private FreshnessPolicy _freshness = null!;
+    private ThermalPolicy _thermal = null!;
+    private SensorVisibilityPolicy _sensorVisibility = null!;
 
     [JsonConstructor]
     public MonitoringProfile(
