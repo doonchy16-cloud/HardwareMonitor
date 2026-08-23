@@ -17,7 +17,7 @@ permissions:
 jobs:
   phase6b:
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 15
+    timeout-minutes: 18
     steps:
       - uses: actions/checkout@v4
         with:
@@ -142,6 +142,97 @@ jobs:
           $publicRouteUnauth = Get-Status "$publicBase$routeText" 'POST' '{}'
 
           Write-Host "BRIDGE_GATEWAY_PARITY health_status=$healthStatus gateway_version=$gatewayVersion local_route_unauth=$localRouteUnauth public_route_unauth=$publicRouteUnauth"
+      - name: Repair missing local Gateway generation fail-closed
+        shell: powershell
+        env:
+          BRIDGE_ROOT: ${{ steps.bridge.outputs.bridge_root }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $criticalPaths = @(
+            'Start_Bridge_Gateway.cmd',
+            'Start_Bridge_Gateway_Hidden.vbs',
+            'scripts/gateway_listener_guard.py',
+            'src/bridge_gateway_mcp_v3.py',
+            'src/bridge_gateway.py',
+            'src/gateway_protocol.py',
+            'src/gateway_lifecycle.py',
+            'src/runtime_topology.py',
+            'src/runtime_maintenance.py',
+            'src/windows_process.py',
+            'src/bridge_common.py',
+            'src/identity.py',
+            'src/component_versions.py',
+            'versions.json'
+          )
+          git -C $env:BRIDGE_ROOT diff --quiet HEAD -- $criticalPaths
+          $criticalClean = $LASTEXITCODE -eq 0
+
+          $fleet = Get-Content (Join-Path $env:BRIDGE_ROOT 'config\fleet.json') -Raw | ConvertFrom-Json
+          $identity = Get-Content (Join-Path $env:BRIDGE_ROOT 'config\identity.json') -Raw | ConvertFrom-Json
+          $machineMatches = ([string]$identity.machine_id).Equals([string]$fleet.gateway_host_machine_id, [System.StringComparison]::OrdinalIgnoreCase)
+          $deviceMatches = ([string]$identity.device_id).Equals([string]$fleet.gateway_host_device_id, [System.StringComparison]::OrdinalIgnoreCase)
+          $isGatewayHost = $machineMatches -and $deviceMatches
+          Write-Host "GATEWAY_REPAIR_PRECHECK is_gateway_host=$isGatewayHost critical_files_clean=$criticalClean"
+
+          if (-not $isGatewayHost) { throw 'This runner is not the exact permanent Gateway host; refusing Gateway mutation.' }
+          if (-not $criticalClean) { throw 'Gateway-critical Bridge files differ from installed HEAD; refusing Gateway mutation.' }
+
+          $repairScript = Join-Path $env:RUNNER_TEMP "hardware-monitor-gateway-repair-$env:GITHUB_RUN_ID.py"
+          @'
+          import pathlib
+          import sys
+          root = pathlib.Path(sys.argv[1]).resolve()
+          sys.path.insert(0, str(root / 'src'))
+          from bridge_common import load_json
+          from component_versions import GATEWAY_VERSION
+          from gateway_lifecycle import restart_gateway_generation
+          from identity import load_fleet, validate_identity
+          fleet = load_fleet(root)
+          identity = validate_identity(load_json(root / 'config' / 'identity.json'), fleet_id=fleet['fleet_id'])
+          result = restart_gateway_generation(root, fleet, identity, expected_version=GATEWAY_VERSION, timeout_seconds=45.0, force=True)
+          status = str(result.get('status') or '')
+          if status not in {'RESTARTED', 'ALREADY_CURRENT'}:
+              raise RuntimeError(f'unexpected Gateway lifecycle status: {status}')
+          print(f'GATEWAY_REPAIR_STATUS={status}')
+          print(f'GATEWAY_REPAIR_VERSION={result.get("gateway_version") or GATEWAY_VERSION}')
+          '@ | Set-Content -Path $repairScript -Encoding UTF8
+
+          try {
+            python $repairScript $env:BRIDGE_ROOT
+            if ($LASTEXITCODE -ne 0) { throw "Bridge Gateway lifecycle repair failed with exit code $LASTEXITCODE." }
+          }
+          finally {
+            Remove-Item $repairScript -Force -ErrorAction SilentlyContinue
+          }
+
+          $localBase = "http://127.0.0.1:$([int]$fleet.gateway_bind_port)"
+          $routeText = '/v2/host/hardware-monitor/telemetry'
+          $ready = $false
+          for ($i = 0; $i -lt 30; $i++) {
+            $healthOk = $false
+            try {
+              $health = Invoke-RestMethod -Uri "$localBase/health" -Method Get -TimeoutSec 2
+              $healthOk = ([string]$health.status).ToUpperInvariant() -eq 'READY'
+            }
+            catch { }
+
+            $routeStatus = -1
+            try {
+              Invoke-WebRequest -Uri "$localBase$routeText" -Method Post -Body '{}' -ContentType 'application/json' -UseBasicParsing -TimeoutSec 2 | Out-Null
+              $routeStatus = 200
+            }
+            catch {
+              try { if ($_.Exception.Response.StatusCode) { $routeStatus = [int]$_.Exception.Response.StatusCode } } catch { }
+            }
+
+            if ($healthOk -and $routeStatus -ne -1 -and $routeStatus -ne 404) {
+              Write-Host "GATEWAY_REPAIR_ROUTE_READY local_route_unauth=$routeStatus"
+              $ready = $true
+              break
+            }
+            Start-Sleep -Milliseconds 500
+          }
+          if (-not $ready) { throw 'Gateway repair completed but telemetry route did not become locally reachable.' }
       - name: Prove real sensor telemetry reaches private Gateway
         shell: powershell
         env:
