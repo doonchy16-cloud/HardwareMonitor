@@ -18,6 +18,10 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.App", "src\
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.App.Tests", "tests\HardwareMonitor.App.Tests\HardwareMonitor.App.Tests.csproj", "{9A6A64CD-7F70-4C80-A479-5E0156D28C75}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.Agent", "src\HardwareMonitor.Agent\HardwareMonitor.Agent.csproj", "{5298090C-CE59-4923-9CF4-1DB7819750B2}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.Agent.Tests", "tests\HardwareMonitor.Agent.Tests\HardwareMonitor.Agent.Tests.csproj", "{72840095-F9C0-4FB4-A507-25236D26652E}"
+EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.Setup.Core", "src\HardwareMonitor.Setup.Core\HardwareMonitor.Setup.Core.csproj", "{4927DAAE-93F6-4B08-B696-27985AA0A2E3}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "HardwareMonitor.Setup", "src\HardwareMonitor.Setup\HardwareMonitor.Setup.csproj", "{7618BE67-2CCB-4D45-9D0A-8614AD97DF41}"
@@ -62,6 +66,14 @@ Global
         {9A6A64CD-7F70-4C80-A479-5E0156D28C75}.Debug|Any CPU.Build.0 = Debug|Any CPU
         {9A6A64CD-7F70-4C80-A479-5E0156D28C75}.Release|Any CPU.ActiveCfg = Release|Any CPU
         {9A6A64CD-7F70-4C80-A479-5E0156D28C75}.Release|Any CPU.Build.0 = Release|Any CPU
+        {5298090C-CE59-4923-9CF4-1DB7819750B2}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {5298090C-CE59-4923-9CF4-1DB7819750B2}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {5298090C-CE59-4923-9CF4-1DB7819750B2}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {5298090C-CE59-4923-9CF4-1DB7819750B2}.Release|Any CPU.Build.0 = Release|Any CPU
+        {72840095-F9C0-4FB4-A507-25236D26652E}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+        {72840095-F9C0-4FB4-A507-25236D26652E}.Debug|Any CPU.Build.0 = Debug|Any CPU
+        {72840095-F9C0-4FB4-A507-25236D26652E}.Release|Any CPU.ActiveCfg = Release|Any CPU
+        {72840095-F9C0-4FB4-A507-25236D26652E}.Release|Any CPU.Build.0 = Release|Any CPU
         {4927DAAE-93F6-4B08-B696-27985AA0A2E3}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
         {4927DAAE-93F6-4B08-B696-27985AA0A2E3}.Debug|Any CPU.Build.0 = Debug|Any CPU
         {4927DAAE-93F6-4B08-B696-27985AA0A2E3}.Release|Any CPU.ActiveCfg = Release|Any CPU
