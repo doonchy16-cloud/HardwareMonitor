@@ -55,6 +55,9 @@
                                             <TextBlock Margin="0,5,0,0" Foreground="{DynamicResource MutedTextBrush}">
                                                 <Run Text="Stale after "/><Run Text="{Binding FreshnessPolicy.StaleAfter.TotalSeconds}"/><Run Text="s · Offline after "/><Run Text="{Binding FreshnessPolicy.OfflineAfter.TotalSeconds}"/><Run Text="s"/>
                                             </TextBlock>
+                                            <TextBlock Margin="0,4,0,0" Foreground="{DynamicResource MutedTextBrush}">
+                                                <Run Text="Thermal: Warm "/><Run Text="{Binding ThermalThresholdPolicy.WarmCelsius}"/><Run Text="°C · Hot "/><Run Text="{Binding ThermalThresholdPolicy.HotCelsius}"/><Run Text="°C · Critical "/><Run Text="{Binding ThermalThresholdPolicy.CriticalCelsius}"/><Run Text="°C"/>
+                                            </TextBlock>
                                         </StackPanel>
                                         <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
                                             <Button Content="Edit" Tag="{Binding ProfileId}" Padding="12,7" Margin="0,0,8,0" Click="EditProfile_Click"/>
@@ -106,6 +109,31 @@
                                 <StackPanel Grid.Column="2">
                                     <TextBlock Text="Offline after (seconds)" Margin="0,0,0,5"/>
                                     <TextBox x:Name="OfflineBox" Padding="9,7"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="Thermal alerts (°C)" Margin="0,18,0,7" FontWeight="SemiBold"/>
+                            <TextBlock Text="Set this profile's warning levels. They must increase from Warm to Hot to Critical."
+                                       Foreground="{DynamicResource MutedTextBrush}" TextWrapping="Wrap" Margin="0,0,0,8"/>
+                            <Grid>
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="10"/>
+                                    <ColumnDefinition/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel>
+                                    <TextBlock Text="Warm" Margin="0,0,0,5"/>
+                                    <TextBox x:Name="WarmBox" Padding="9,7"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Hot" Margin="0,0,0,5"/>
+                                    <TextBox x:Name="HotBox" Padding="9,7"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="4">
+                                    <TextBlock Text="Critical" Margin="0,0,0,5"/>
+                                    <TextBox x:Name="CriticalBox" Padding="9,7"/>
                                 </StackPanel>
                             </Grid>
 
