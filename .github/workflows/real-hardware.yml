@@ -31,7 +31,7 @@ jobs:
     name: Build, test, package, and probe real hardware
     needs: announce
     runs-on: [self-hosted, Windows, X64]
-    timeout-minutes: 25
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-dotnet@v5
@@ -54,8 +54,65 @@ jobs:
         run: dotnet test --solution HardwareMonitor.sln --configuration Release --no-build --minimum-expected-tests 1
       - name: Restore hardware smoke probe
         run: dotnet restore tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj
-      - name: Probe actual hardware and temperatures
-        run: dotnet run --project tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj --configuration Release --no-restore
+      - name: Locate direct Doonchy Bridge
+        id: bridge
+        shell: powershell
+        env:
+          BRIDGE_ROOT_OVERRIDE: ${{ vars.DOONCHY_BRIDGE_ROOT }}
+        run: |
+          function Test-DirectBridgeRoot([string]$Path) {
+            if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+            $transportPath = Join-Path $Path 'config\transport-v2.local.json'
+            $identityPath = Join-Path $Path 'config\identity.json'
+            if (-not (Test-Path $transportPath) -or -not (Test-Path $identityPath)) { return $false }
+            try {
+              $transport = Get-Content $transportPath -Raw | ConvertFrom-Json
+              $identity = Get-Content $identityPath -Raw | ConvertFrom-Json
+              return $transport.schema_version -eq '2.0' `
+                -and $transport.mode -eq 'direct' `
+                -and -not [string]::IsNullOrWhiteSpace([string]$transport.gateway_url) `
+                -and ([string]$transport.host_token).Length -ge 24 `
+                -and $identity.schema_version -eq '1.1' `
+                -and -not [string]::IsNullOrWhiteSpace([string]$identity.device_id)
+            }
+            catch { return $false }
+          }
+
+          $matches = @()
+          if (-not [string]::IsNullOrWhiteSpace($env:BRIDGE_ROOT_OVERRIDE)) {
+            if (-not (Test-DirectBridgeRoot $env:BRIDGE_ROOT_OVERRIDE)) {
+              throw 'DOONCHY_BRIDGE_ROOT does not point to a valid direct Bridge installation.'
+            }
+            $matches = @((Resolve-Path $env:BRIDGE_ROOT_OVERRIDE).Path)
+          }
+          else {
+            foreach ($drive in Get-PSDrive -PSProvider FileSystem) {
+              try {
+                foreach ($directory in Get-ChildItem -Path $drive.Root -Directory -Force -ErrorAction Stop) {
+                  if (Test-DirectBridgeRoot $directory.FullName) {
+                    $matches += $directory.FullName
+                  }
+                }
+              }
+              catch { }
+            }
+            $matches = @($matches | Sort-Object -Unique)
+          }
+
+          if ($matches.Count -ne 1) {
+            throw "Expected exactly one direct Bridge installation, found $($matches.Count). Set repository variable DOONCHY_BRIDGE_ROOT to disambiguate."
+          }
+          "bridge_root=$($matches[0])" >> $env:GITHUB_OUTPUT
+      - name: Probe actual hardware, temperatures, and private Gateway telemetry
+        shell: powershell
+        env:
+          BRIDGE_ROOT: ${{ steps.bridge.outputs.bridge_root }}
+        run: |
+          $sequencePath = Join-Path $env:LOCALAPPDATA 'The Spark\Hardware Monitor\gateway-telemetry-sequence.json'
+          dotnet run --project tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj --configuration Release --no-restore -- `
+            --gateway-bridge-root $env:BRIDGE_ROOT `
+            --gateway-sequence-path $sequencePath
+          if ($LASTEXITCODE -ne 0) { throw "Real hardware/Gateway smoke failed with exit code $LASTEXITCODE." }
       - name: Restore background agent smoke probe
         run: dotnet restore tools/HardwareMonitor.AgentSmoke/HardwareMonitor.AgentSmoke.csproj
       - name: Build background agent smoke probe
@@ -166,7 +223,7 @@ jobs:
           HARDWARE_RESULT: ${{ needs.hardware.result }}
         run: |
           $state = if ($env:HARDWARE_RESULT -eq 'success') { 'success' } else { 'failure' }
-          $description = if ($state -eq 'success') { 'Real Windows hardware, agent IPC, tests, and MSIX gate passed' } else { "Real Windows hardware/MSIX gate: $env:HARDWARE_RESULT" }
+          $description = if ($state -eq 'success') { 'Real Windows hardware, Gateway telemetry, agent IPC, tests, and MSIX gate passed' } else { "Real Windows hardware/Gateway/MSIX gate: $env:HARDWARE_RESULT" }
           $target = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
           $body = @{ state = $state; context = 'hardware-monitor/real'; description = $description; target_url = $target } | ConvertTo-Json
           Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' } -Body $body -ContentType 'application/json' | Out-Null
