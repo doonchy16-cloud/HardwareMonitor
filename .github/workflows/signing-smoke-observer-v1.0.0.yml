@@ -18,7 +18,7 @@ jobs:
       - name: Observe signing smoke run to terminal state
         env:
           GH_TOKEN: ${{ github.token }}
-          TARGET_SMOKE_SHA: 7e48ca812e724fdacc3bd025f1c9e00f3dff2033
+          TARGET_SMOKE_SHA: 77e1115873babe05feaae190462e66d32e73dc8e
         shell: bash
         run: |
           set -euo pipefail
