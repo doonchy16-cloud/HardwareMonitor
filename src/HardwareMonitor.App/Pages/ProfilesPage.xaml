@@ -1,0 +1,155 @@
+<UserControl x:Class="TheSpark.HardwareMonitor.App.Pages.ProfilesPage"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <UserControl.Resources>
+        <Style x:Key="Panel" TargetType="Border">
+            <Setter Property="Background" Value="{DynamicResource SurfaceBrush}"/>
+            <Setter Property="BorderBrush" Value="{DynamicResource BorderBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="CornerRadius" Value="14"/>
+            <Setter Property="Padding" Value="18"/>
+            <Setter Property="Margin" Value="0,0,0,12"/>
+        </Style>
+        <Style x:Key="FieldLabel" TargetType="TextBlock">
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Margin" Value="0,10,0,5"/>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid Margin="28">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition/>
+        </Grid.RowDefinitions>
+
+        <StackPanel Margin="0,0,0,18">
+            <TextBlock Text="Profiles" FontSize="30" FontWeight="SemiBold"/>
+            <TextBlock Text="Create local monitoring and viewer profiles. Nothing is created until you save it."
+                       Foreground="{DynamicResource MutedTextBrush}" Margin="0,5,0,0" TextWrapping="Wrap"/>
+        </StackPanel>
+
+        <Grid Grid.Row="1">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="290"/>
+                <ColumnDefinition Width="16"/>
+                <ColumnDefinition/>
+            </Grid.ColumnDefinitions>
+
+            <Border Grid.Column="0" Style="{StaticResource Panel}" Margin="0">
+                <Grid>
+                    <Grid.RowDefinitions>
+                        <RowDefinition Height="Auto"/>
+                        <RowDefinition/>
+                        <RowDefinition Height="Auto"/>
+                    </Grid.RowDefinitions>
+                    <StackPanel>
+                        <TextBlock Text="Local profiles" FontSize="18" FontWeight="SemiBold"/>
+                        <TextBlock Text="Starts empty. Names and roles are yours to define."
+                                   Foreground="{DynamicResource MutedTextBrush}" Margin="0,4,0,12" TextWrapping="Wrap"/>
+                        <StackPanel Orientation="Horizontal">
+                            <Button x:Name="NewProfileButton" Content="New profile" Click="NewProfile_Click" Margin="0,0,8,0"/>
+                            <Button x:Name="ReloadButton" Content="Reload" Click="Reload_Click"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <ListBox x:Name="ProfileList" Grid.Row="1" Margin="0,14,0,14" DisplayMemberPath="DisplayName"
+                             SelectionChanged="ProfileList_SelectionChanged"/>
+
+                    <TextBlock x:Name="RegistrySummaryText" Grid.Row="2" Foreground="{DynamicResource MutedTextBrush}"
+                               TextWrapping="Wrap"/>
+                </Grid>
+            </Border>
+
+            <ScrollViewer Grid.Column="2" VerticalScrollBarVisibility="Auto">
+                <StackPanel x:Name="EditorRoot">
+                    <Border Style="{StaticResource Panel}">
+                        <StackPanel>
+                            <TextBlock Text="Profile identity" FontSize="18" FontWeight="SemiBold"/>
+                            <TextBlock Text="A profile is a configurable role/policy view, not a hard-coded physical device."
+                                       Foreground="{DynamicResource MutedTextBrush}" Margin="0,4,0,2" TextWrapping="Wrap"/>
+
+                            <TextBlock Text="Display name" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="ProfileNameTextBox"/>
+
+                            <CheckBox x:Name="EnabledCheckBox" Content="Enabled" Margin="0,14,0,0"/>
+
+                            <TextBlock Text="Device bindings" Style="{StaticResource FieldLabel}"/>
+                            <TextBox x:Name="DeviceBindingsTextBox" AcceptsReturn="True" MinHeight="58" TextWrapping="Wrap"/>
+                            <TextBlock Text="Optional. Enter device IDs separated by commas, semicolons, or new lines. One device may belong to multiple profiles."
+                                       Foreground="{DynamicResource MutedTextBrush}" Margin="0,5,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Panel}">
+                        <StackPanel>
+                            <TextBlock Text="Capabilities" FontSize="18" FontWeight="SemiBold"/>
+                            <WrapPanel Margin="0,12,0,0">
+                                <CheckBox x:Name="ViewerRoleCheckBox" Content="Viewer" Margin="0,0,20,8"/>
+                                <CheckBox x:Name="PublisherRoleCheckBox" Content="Telemetry publisher" Margin="0,0,20,8"/>
+                                <CheckBox x:Name="TrainingRoleCheckBox" Content="Training-focused monitor" Margin="0,0,20,8"/>
+                            </WrapPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Panel}">
+                        <StackPanel>
+                            <TextBlock Text="Viewer scope" FontSize="18" FontWeight="SemiBold"/>
+                            <TextBlock Text="All Profiles stays dynamic and automatically includes profiles created later."
+                                       Foreground="{DynamicResource MutedTextBrush}" Margin="0,4,0,10" TextWrapping="Wrap"/>
+                            <ComboBox x:Name="ScopeCombo" Width="220" HorizontalAlignment="Left" SelectionChanged="ScopeCombo_SelectionChanged">
+                                <ComboBoxItem Content="All Profiles"/>
+                                <ComboBoxItem Content="Selected Profiles"/>
+                            </ComboBox>
+                            <StackPanel x:Name="SelectedScopePanel" Visibility="Collapsed" Margin="0,12,0,0">
+                                <TextBlock Text="Visible profiles" FontWeight="SemiBold"/>
+                                <ListBox x:Name="SelectedScopeProfilesList" Height="120" Margin="0,6,0,0"
+                                         SelectionMode="Multiple" DisplayMemberPath="DisplayName"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Panel}">
+                        <StackPanel>
+                            <TextBlock Text="Monitoring policy" FontSize="18" FontWeight="SemiBold"/>
+                            <Grid Margin="0,4,0,0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition/>
+                                    <ColumnDefinition Width="16"/>
+                                    <ColumnDefinition/>
+                                </Grid.ColumnDefinitions>
+                                <StackPanel Grid.Column="0">
+                                    <TextBlock Text="Stale after (seconds)" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="StaleSecondsTextBox"/>
+                                    <TextBlock Text="Warning temperature (°C)" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="WarningTemperatureTextBox"/>
+                                </StackPanel>
+                                <StackPanel Grid.Column="2">
+                                    <TextBlock Text="Offline after (seconds)" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="OfflineSecondsTextBox"/>
+                                    <TextBlock Text="Critical temperature (°C)" Style="{StaticResource FieldLabel}"/>
+                                    <TextBox x:Name="CriticalTemperatureTextBox"/>
+                                </StackPanel>
+                            </Grid>
+
+                            <TextBlock Text="Unavailable sensors" Style="{StaticResource FieldLabel}"/>
+                            <ComboBox x:Name="UnavailableSensorsCombo" Width="260" HorizontalAlignment="Left">
+                                <ComboBoxItem Content="Hide unavailable sensors"/>
+                                <ComboBoxItem Content="Show unavailable state"/>
+                            </ComboBox>
+                        </StackPanel>
+                    </Border>
+
+                    <Border Style="{StaticResource Panel}" Margin="0">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal">
+                                <Button x:Name="SaveProfileButton" Content="Save profile" Click="SaveProfile_Click" Margin="0,0,8,0"/>
+                                <Button x:Name="DeleteProfileButton" Content="Delete profile" Click="DeleteProfile_Click" IsEnabled="False"/>
+                            </StackPanel>
+                            <TextBlock x:Name="StatusText" Foreground="{DynamicResource MutedTextBrush}" Margin="0,10,0,0" TextWrapping="Wrap"/>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </ScrollViewer>
+        </Grid>
+    </Grid>
+</UserControl>
