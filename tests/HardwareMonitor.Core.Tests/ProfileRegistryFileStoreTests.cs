@@ -44,7 +44,8 @@ public sealed class ProfileRegistryFileStoreTests
             var loaded = await store.LoadAsync(TestContext.Current.CancellationToken);
 
             Assert.True(File.Exists(path));
-            Assert.Equal(expected, loaded);
+            Assert.Equal(expected.SchemaVersion, loaded.SchemaVersion);
+            Assert.Equal(Assert.Single(expected.Profiles), Assert.Single(loaded.Profiles));
             Assert.Empty(Directory.GetFiles(Path.GetDirectoryName(path)!, "*.tmp", SearchOption.TopDirectoryOnly));
         }
         finally
@@ -69,8 +70,8 @@ public sealed class ProfileRegistryFileStoreTests
             await store.SaveAsync(replacement, TestContext.Current.CancellationToken);
             var loaded = await store.LoadAsync(TestContext.Current.CancellationToken);
 
-            Assert.Equal(replacement, loaded);
-            Assert.Single(loaded.Profiles);
+            Assert.Equal(replacement.SchemaVersion, loaded.SchemaVersion);
+            Assert.Equal(Assert.Single(replacement.Profiles), Assert.Single(loaded.Profiles));
             Assert.Equal("New", loaded.Profiles[0].DisplayName);
             Assert.Empty(Directory.GetFiles(root, "*.tmp", SearchOption.TopDirectoryOnly));
         }
