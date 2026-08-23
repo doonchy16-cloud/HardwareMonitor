@@ -158,6 +158,12 @@ public sealed class ProfileSyncClient
             var freshness = new FreshnessPolicy(
                 TimeSpan.FromSeconds(item.Freshness.StaleAfterSeconds),
                 TimeSpan.FromSeconds(item.Freshness.OfflineAfterSeconds));
+            var thermal = item.Thermal is null
+                ? ThermalThresholdPolicy.Default
+                : new ThermalThresholdPolicy(
+                    item.Thermal.WarmCelsius,
+                    item.Thermal.HotCelsius,
+                    item.Thermal.CriticalCelsius);
 
             profiles.Add(new HardwareProfile(
                 profileId,
@@ -168,7 +174,8 @@ public sealed class ProfileSyncClient
                 visibleProfileIds,
                 freshness,
                 item.Enabled,
-                item.Revision));
+                item.Revision,
+                thermalThresholdPolicy: thermal));
         }
 
         return new ProfileRegistrySnapshot(remote.RegistryRevision, profiles);
@@ -212,6 +219,9 @@ public sealed class ProfileSyncClient
         [JsonPropertyName("freshness")]
         public FreshnessDto? Freshness { get; set; }
 
+        [JsonPropertyName("thermal")]
+        public ThermalDto? Thermal { get; set; }
+
         [JsonPropertyName("revision")]
         public long Revision { get; set; }
     }
@@ -223,5 +233,17 @@ public sealed class ProfileSyncClient
 
         [JsonPropertyName("offline_after_seconds")]
         public double OfflineAfterSeconds { get; set; }
+    }
+
+    private sealed class ThermalDto
+    {
+        [JsonPropertyName("warm_celsius")]
+        public double WarmCelsius { get; set; }
+
+        [JsonPropertyName("hot_celsius")]
+        public double HotCelsius { get; set; }
+
+        [JsonPropertyName("critical_celsius")]
+        public double CriticalCelsius { get; set; }
     }
 }
