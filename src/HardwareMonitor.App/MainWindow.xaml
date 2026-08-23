@@ -36,6 +36,7 @@
                         <Button Style="{StaticResource NavButton}" Content="◉   Dashboard" Tag="Dashboard" Click="NavButton_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="🌡   Sensors" Tag="Sensors" Click="NavButton_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="🖥   Hardware" Tag="Hardware" Click="NavButton_Click"/>
+                        <Button Style="{StaticResource NavButton}" Content="👥   Profiles" Tag="Profiles" Click="NavButton_Click"/>
                         <Button Style="{StaticResource NavButton}" Content="⚙   Settings &amp; Diagnostics" Tag="Settings" Click="NavButton_Click"/>
                     </StackPanel>
                     <StackPanel Grid.Row="2" Margin="4,18,4,8"><TextBlock Text="v1.0.0 · stable" Foreground="{DynamicResource MutedTextBrush}"/><TextBlock Text="Telemetry stays local" Foreground="{DynamicResource MutedTextBrush}" FontSize="11" Margin="0,3,0,0"/></StackPanel>
