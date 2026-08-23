@@ -27,7 +27,9 @@ jobs:
           DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
         with:
           dotnet-version: 10.0.400
-      - name: Restore Sensors tests
-        run: dotnet restore tests/HardwareMonitor.Sensors.Tests/HardwareMonitor.Sensors.Tests.csproj
-      - name: Run Sensors tests
-        run: dotnet test tests/HardwareMonitor.Sensors.Tests/HardwareMonitor.Sensors.Tests.csproj --configuration Release --no-restore --logger "console;verbosity=normal"
+      - name: Restore solution
+        run: dotnet restore HardwareMonitor.sln
+      - name: Build solution
+        run: dotnet build HardwareMonitor.sln --configuration Release --no-restore
+      - name: Run solution tests
+        run: dotnet test --solution HardwareMonitor.sln --configuration Release --no-build --minimum-expected-tests 1
