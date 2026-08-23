@@ -15,6 +15,9 @@ public sealed class ProfileEditorViewModel : INotifyPropertyChanged
     private ViewerScope _viewerScope;
     private double _staleAfterSeconds;
     private double _offlineAfterSeconds;
+    private double _warmCelsius;
+    private double _hotCelsius;
+    private double _criticalCelsius;
     private string? _validationError;
 
     internal ProfileEditorViewModel(HardwareProfile? profile)
@@ -28,6 +31,9 @@ public sealed class ProfileEditorViewModel : INotifyPropertyChanged
         _viewerScope = profile?.ViewerScope ?? ViewerScope.None;
         _staleAfterSeconds = profile?.FreshnessPolicy.StaleAfter.TotalSeconds ?? 5;
         _offlineAfterSeconds = profile?.FreshnessPolicy.OfflineAfter.TotalSeconds ?? 20;
+        _warmCelsius = profile?.ThermalThresholdPolicy.WarmCelsius ?? ThermalThresholdPolicy.Default.WarmCelsius;
+        _hotCelsius = profile?.ThermalThresholdPolicy.HotCelsius ?? ThermalThresholdPolicy.Default.HotCelsius;
+        _criticalCelsius = profile?.ThermalThresholdPolicy.CriticalCelsius ?? ThermalThresholdPolicy.Default.CriticalCelsius;
         _capabilities = profile is null
             ? new HashSet<ProfileCapability>()
             : new HashSet<ProfileCapability>(profile.Capabilities);
@@ -81,6 +87,24 @@ public sealed class ProfileEditorViewModel : INotifyPropertyChanged
         set => SetField(ref _offlineAfterSeconds, value);
     }
 
+    public double WarmCelsius
+    {
+        get => _warmCelsius;
+        set => SetField(ref _warmCelsius, value);
+    }
+
+    public double HotCelsius
+    {
+        get => _hotCelsius;
+        set => SetField(ref _hotCelsius, value);
+    }
+
+    public double CriticalCelsius
+    {
+        get => _criticalCelsius;
+        set => SetField(ref _criticalCelsius, value);
+    }
+
     public ObservableCollection<Guid> VisibleProfileIds { get; }
     public ObservableCollection<SensorKind> VisibleSensorKinds { get; }
     public IReadOnlySet<ProfileCapability> Capabilities => _capabilities;
@@ -114,6 +138,7 @@ public sealed class ProfileEditorViewModel : INotifyPropertyChanged
             var freshness = new FreshnessPolicy(
                 TimeSpan.FromSeconds(StaleAfterSeconds),
                 TimeSpan.FromSeconds(OfflineAfterSeconds));
+            var thermal = new ThermalThresholdPolicy(WarmCelsius, HotCelsius, CriticalCelsius);
 
             profile = new HardwareProfile(
                 ProfileId,
@@ -125,9 +150,19 @@ public sealed class ProfileEditorViewModel : INotifyPropertyChanged
                 freshness,
                 Enabled,
                 revision,
-                new SensorVisibilityPolicy(new HashSet<SensorKind>(VisibleSensorKinds)));
+                new SensorVisibilityPolicy(new HashSet<SensorKind>(VisibleSensorKinds)),
+                thermal);
             ValidationError = null;
             return true;
+        }
+        catch (ArgumentOutOfRangeException ex) when (
+            ex.Message.Contains("Thermal", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ex.ParamName, "criticalCelsius", StringComparison.OrdinalIgnoreCase) ||
+            string.Equals(ex.ParamName, "warmCelsius", StringComparison.OrdinalIgnoreCase))
+        {
+            profile = null;
+            ValidationError = "Thermal thresholds must be finite numbers increasing from Warm to Hot to Critical.";
+            return false;
         }
         catch (ArgumentOutOfRangeException ex)
         {
