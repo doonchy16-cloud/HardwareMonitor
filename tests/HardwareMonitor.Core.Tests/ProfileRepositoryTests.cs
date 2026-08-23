@@ -101,7 +101,10 @@ public sealed class ProfileRepositoryTests
         try
         {
             var path = Path.Combine(directory.FullName, "profiles.json");
-            await File.WriteAllTextAsync(path, "{ definitely-not-json");
+            await File.WriteAllTextAsync(
+                path,
+                "{ definitely-not-json",
+                TestContext.Current.CancellationToken);
             var repository = new JsonProfileRepository(path);
 
             var loaded = await repository.LoadAsync();
