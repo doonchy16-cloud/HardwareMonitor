@@ -82,6 +82,10 @@ public sealed class ProfileSyncClient
         {
             return false;
         }
+        catch (InvalidDataException)
+        {
+            return false;
+        }
         catch (ArgumentException)
         {
             return false;
