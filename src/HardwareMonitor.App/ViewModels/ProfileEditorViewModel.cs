@@ -28,9 +28,15 @@ public sealed class ProfileEditorViewModel : INotifyPropertyChanged
         _viewerScope = profile?.ViewerScope ?? ViewerScope.None;
         _staleAfterSeconds = profile?.FreshnessPolicy.StaleAfter.TotalSeconds ?? 5;
         _offlineAfterSeconds = profile?.FreshnessPolicy.OfflineAfter.TotalSeconds ?? 20;
-        _capabilities = new HashSet<ProfileCapability>(profile?.Capabilities ?? Array.Empty<ProfileCapability>());
-        VisibleProfileIds = new ObservableCollection<Guid>(profile?.VisibleProfileIds ?? Array.Empty<Guid>());
-        VisibleSensorKinds = new ObservableCollection<SensorKind>(profile?.SensorVisibilityPolicy.VisibleKinds ?? Array.Empty<SensorKind>());
+        _capabilities = profile is null
+            ? new HashSet<ProfileCapability>()
+            : new HashSet<ProfileCapability>(profile.Capabilities);
+        VisibleProfileIds = profile is null
+            ? new ObservableCollection<Guid>()
+            : new ObservableCollection<Guid>(profile.VisibleProfileIds);
+        VisibleSensorKinds = profile is null
+            ? new ObservableCollection<SensorKind>()
+            : new ObservableCollection<SensorKind>(profile.SensorVisibilityPolicy.VisibleKinds);
     }
 
     public event PropertyChangedEventHandler? PropertyChanged;
