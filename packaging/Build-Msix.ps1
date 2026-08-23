@@ -39,9 +39,26 @@ Write-Host "Publishing Hardware Monitor $Version (win-x64, self-contained)..."
     --runtime win-x64 `
     --self-contained true `
     --output $publishRoot
-if ($LASTEXITCODE -ne 0) { throw "dotnet publish failed with exit code $LASTEXITCODE." }
+if ($LASTEXITCODE -ne 0) { throw "Hardware Monitor dotnet publish failed with exit code $LASTEXITCODE." }
+
+Write-Host "Publishing Hardware Monitor background agent..."
+& dotnet publish (Join-Path $repoRoot "src/HardwareMonitor.Agent/HardwareMonitor.Agent.csproj") `
+    --configuration Release `
+    --runtime win-x64 `
+    --self-contained true `
+    --output $publishRoot
+if ($LASTEXITCODE -ne 0) { throw "Hardware Monitor agent dotnet publish failed with exit code $LASTEXITCODE." }
+
+$appExe = Join-Path $publishRoot "HardwareMonitor.exe"
+$agentExe = Join-Path $publishRoot "HardwareMonitor.Agent.exe"
+if (-not (Test-Path $appExe)) { throw "HardwareMonitor.exe was not published." }
+if (-not (Test-Path $agentExe)) { throw "HardwareMonitor.Agent.exe was not published." }
 
 Copy-Item (Join-Path $publishRoot "*") $stageRoot -Recurse -Force
+if (-not (Test-Path (Join-Path $stageRoot "HardwareMonitor.Agent.exe"))) {
+    throw "HardwareMonitor.Agent.exe was not staged into the MSIX payload."
+}
+
 $stageAssets = Join-Path $stageRoot "Assets"
 New-Item -ItemType Directory -Path $stageAssets -Force | Out-Null
 Copy-Item (Join-Path $PSScriptRoot "Assets/Square44x44Logo.png") $stageAssets -Force
@@ -89,4 +106,5 @@ $packageHash = (Get-FileHash $packagePath -Algorithm SHA256).Hash
 Write-Host "PACKAGE=$packagePath"
 Write-Host "APPINSTALLER=$appInstallerPath"
 Write-Host "PACKAGE_SHA256=$packageHash"
+Write-Host "AGENT_INCLUDED=1"
 Write-Host "SIGNED=$(-not [string]::IsNullOrWhiteSpace($CertificatePath))"
