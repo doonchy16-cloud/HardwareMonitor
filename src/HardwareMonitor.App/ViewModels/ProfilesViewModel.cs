@@ -125,7 +125,8 @@ public sealed class ProfilesViewModel : INotifyPropertyChanged
             current.FreshnessPolicy,
             enabled,
             current.Revision + 1,
-            current.SensorVisibilityPolicy);
+            current.SensorVisibilityPolicy,
+            current.ThermalThresholdPolicy);
 
         var nextProfiles = Profiles
             .Select(profile => profile.ProfileId == profileId ? replacement : profile)
