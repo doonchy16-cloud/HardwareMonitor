@@ -7,6 +7,7 @@ public sealed class HardwareMonitorService : IAsyncDisposable
     private readonly ISensorProvider _provider;
     private CancellationTokenSource? _cts;
     private Task? _pollTask;
+    private Action<Exception>? _faulted;
 
     public HardwareMonitorService(ISensorProvider provider, TimeSpan? pollInterval = null)
     {
@@ -16,7 +17,11 @@ public sealed class HardwareMonitorService : IAsyncDisposable
 
     public event Action<HardwareSnapshot>? SnapshotUpdated;
 
-    public event Action<Exception>? Faulted;
+    public event Action<Exception>? Faulted
+    {
+        add => _faulted += value;
+        remove => _faulted -= value;
+    }
 
     public TimeSpan PollInterval { get; set; }
 
