@@ -150,7 +150,12 @@ public sealed class BridgeGatewayTelemetryPublisher : IAsyncDisposable
             try
             {
                 using var response = await _httpClient.SendAsync(request, cancellationToken).ConfigureAwait(false);
-                response.EnsureSuccessStatusCode();
+                if (!response.IsSuccessStatusCode)
+                {
+                    Status = Status with { LastErrorCode = $"HttpStatus{(int)response.StatusCode}" };
+                    return false;
+                }
+
                 var responseText = await response.Content.ReadAsStringAsync(cancellationToken).ConfigureAwait(false);
                 using var responseJson = JsonDocument.Parse(responseText);
                 if (!responseJson.RootElement.TryGetProperty("sequence", out var acceptedSequenceElement)
