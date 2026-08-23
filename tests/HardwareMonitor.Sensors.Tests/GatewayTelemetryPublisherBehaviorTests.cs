@@ -1,5 +1,6 @@
 using System.Net;
 using System.Net.Http.Headers;
+using System.Text;
 using System.Text.Json;
 using TheSpark.HardwareMonitor.Core.Models;
 using TheSpark.HardwareMonitor.Core.Profiles;
@@ -44,7 +45,7 @@ public sealed class GatewayTelemetryPublisherBehaviorTests : IDisposable
         Assert.True(publisher.Status.Enabled);
         Assert.DoesNotContain(TestToken, publisher.Status.ToString(), StringComparison.Ordinal);
 
-        var published = await publisher.PublishAsync(HardwareSnapshot.Empty(DateTimeOffset.UtcNow), CancellationToken.None);
+        var published = await publisher.PublishAsync(HardwareSnapshot.Empty(DateTimeOffset.UtcNow), TestContext.Current.CancellationToken);
 
         Assert.False(published);
         Assert.Equal(0, handler.CallCount);
@@ -61,7 +62,7 @@ public sealed class GatewayTelemetryPublisherBehaviorTests : IDisposable
         var handler = new CaptureHandler();
         await using var publisher = new BridgeGatewayTelemetryPublisher(bridgeRoot, sequencePath, profileStore, handler);
 
-        var published = await publisher.PublishAsync(CreateSnapshot(), CancellationToken.None);
+        var published = await publisher.PublishAsync(CreateSnapshot(), TestContext.Current.CancellationToken);
 
         Assert.True(published);
         Assert.Equal(1, handler.CallCount);
@@ -114,7 +115,7 @@ public sealed class GatewayTelemetryPublisherBehaviorTests : IDisposable
         var failingHandler = new CaptureHandler(throwOnSend: true);
         await using (var first = new BridgeGatewayTelemetryPublisher(bridgeRoot, sequencePath, profileStore, failingHandler))
         {
-            var firstPublished = await first.PublishAsync(CreateSnapshot(), CancellationToken.None);
+            var firstPublished = await first.PublishAsync(CreateSnapshot(), TestContext.Current.CancellationToken);
             Assert.False(firstPublished);
             Assert.Equal(1, failingHandler.Sequences.Single());
             Assert.Equal(nameof(HttpRequestException), first.Status.LastErrorCode);
@@ -124,7 +125,7 @@ public sealed class GatewayTelemetryPublisherBehaviorTests : IDisposable
         var succeedingHandler = new CaptureHandler();
         await using (var second = new BridgeGatewayTelemetryPublisher(bridgeRoot, sequencePath, profileStore, succeedingHandler))
         {
-            var secondPublished = await second.PublishAsync(CreateSnapshot(), CancellationToken.None);
+            var secondPublished = await second.PublishAsync(CreateSnapshot(), TestContext.Current.CancellationToken);
             Assert.True(secondPublished);
             Assert.Equal(2, succeedingHandler.Sequences.Single());
             Assert.Equal(2, second.Status.LastAcceptedSequence);
@@ -141,10 +142,10 @@ public sealed class GatewayTelemetryPublisherBehaviorTests : IDisposable
         var handler = new CaptureHandler();
         await using var publisher = new BridgeGatewayTelemetryPublisher(bridgeRoot, sequencePath, profileStore, handler);
 
-        await publisher.StartAsync();
+        await publisher.StartAsync(TestContext.Current.CancellationToken);
         publisher.Queue(CreateSnapshot());
 
-        await handler.Received.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        await handler.Received.Task.WaitAsync(TimeSpan.FromSeconds(2), TestContext.Current.CancellationToken);
         Assert.Equal(1, handler.CallCount);
     }
 
@@ -198,7 +199,9 @@ public sealed class GatewayTelemetryPublisherBehaviorTests : IDisposable
             new FreshnessPolicy(TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(20)),
             new ThermalPolicy(80, 95),
             new SensorVisibilityPolicy(UnavailableSensorBehavior.Hide));
-        await store.SaveAsync(new ProfileRegistryDocument(ProfileContract.CurrentSchemaVersion, [profile]));
+        await store.SaveAsync(
+            new ProfileRegistryDocument(ProfileContract.CurrentSchemaVersion, [profile]),
+            TestContext.Current.CancellationToken);
         return store;
     }
 
@@ -284,7 +287,10 @@ public sealed class GatewayTelemetryPublisherBehaviorTests : IDisposable
             var acceptedSequence = Sequences.Count == 0 ? 0 : Sequences[^1];
             return new HttpResponseMessage(HttpStatusCode.Accepted)
             {
-                Content = JsonContent.Create(new { ok = true, sequence = acceptedSequence }),
+                Content = new StringContent(
+                    JsonSerializer.Serialize(new { ok = true, sequence = acceptedSequence }),
+                    Encoding.UTF8,
+                    "application/json"),
             };
         }
     }
