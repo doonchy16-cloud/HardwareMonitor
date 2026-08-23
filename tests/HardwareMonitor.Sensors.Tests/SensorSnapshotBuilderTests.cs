@@ -43,6 +43,25 @@ public sealed class SensorSnapshotBuilderTests
         Assert.Equal(SensorAvailability.NotExposed, reading.Availability);
     }
 
+    [Theory]
+    [InlineData(double.NaN)]
+    [InlineData(double.PositiveInfinity)]
+    [InlineData(double.NegativeInfinity)]
+    public void Non_finite_backend_value_is_normalized_as_not_exposed(double value)
+    {
+        var raw = new RawHardwareSample(
+            "gpu/0",
+            "GPU",
+            HardwareKind.Gpu,
+            [new RawSensorSample("gpu/0/power", "GPU Power", SensorKind.Power, value, "W")]);
+
+        var snapshot = SensorSnapshotBuilder.Build([raw], DateTimeOffset.UtcNow);
+        var reading = Assert.Single(Assert.Single(snapshot.Devices).Sensors);
+
+        Assert.Null(reading.Value);
+        Assert.Equal(SensorAvailability.NotExposed, reading.Availability);
+    }
+
     [Fact]
     public void Builder_keeps_multiple_devices_separate()
     {
