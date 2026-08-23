@@ -11,7 +11,8 @@ public sealed class HardwareProfile
         IReadOnlySet<Guid> visibleProfileIds,
         FreshnessPolicy freshnessPolicy,
         bool enabled = true,
-        long revision = 0)
+        long revision = 0,
+        SensorVisibilityPolicy? sensorVisibilityPolicy = null)
     {
         if (profileId == Guid.Empty)
         {
@@ -39,6 +40,7 @@ public sealed class HardwareProfile
         ViewerScope = viewerScope;
         VisibleProfileIds = new HashSet<Guid>(visibleProfileIds);
         FreshnessPolicy = freshnessPolicy;
+        SensorVisibilityPolicy = sensorVisibilityPolicy ?? SensorVisibilityPolicy.All;
         Enabled = enabled;
         Revision = revision;
     }
@@ -50,6 +52,7 @@ public sealed class HardwareProfile
     public ViewerScope ViewerScope { get; }
     public IReadOnlySet<Guid> VisibleProfileIds { get; }
     public FreshnessPolicy FreshnessPolicy { get; }
+    public SensorVisibilityPolicy SensorVisibilityPolicy { get; }
     public bool Enabled { get; }
     public long Revision { get; }
 }
