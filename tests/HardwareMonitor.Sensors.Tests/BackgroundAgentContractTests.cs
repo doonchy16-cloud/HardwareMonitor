@@ -1,4 +1,6 @@
 using System.Reflection;
+using TheSpark.HardwareMonitor.Core;
+using TheSpark.HardwareMonitor.Core.Profiles;
 using TheSpark.HardwareMonitor.Sensors;
 
 namespace TheSpark.HardwareMonitor.Sensors.Tests;
@@ -65,6 +67,23 @@ public sealed class BackgroundAgentContractTests
         var client = RequiredType("AgentIpcClient");
         Assert.NotNull(client.GetMethod("GetHealthAsync"));
         Assert.NotNull(client.GetMethod("RestartAsync"));
+    }
+
+    [Fact]
+    public void Background_agent_contract_is_constructible_and_observes_sensor_faults()
+    {
+        var agent = RequiredType("BackgroundHardwareAgent");
+        Assert.NotNull(agent.GetConstructor([typeof(HardwareMonitorService), typeof(ProfileRegistryFileStore)]));
+        Assert.True(typeof(IAsyncDisposable).IsAssignableFrom(agent));
+
+        var server = RequiredType("AgentIpcServer");
+        Assert.NotNull(server.GetConstructor([agent, typeof(string)]));
+        Assert.True(typeof(IAsyncDisposable).IsAssignableFrom(server));
+
+        var client = RequiredType("AgentIpcClient");
+        Assert.NotNull(client.GetConstructor([typeof(string), typeof(TimeSpan)]));
+
+        Assert.NotNull(typeof(HardwareMonitorService).GetEvent("Faulted", BindingFlags.Instance | BindingFlags.Public));
     }
 
     private static Type RequiredType(string name)
