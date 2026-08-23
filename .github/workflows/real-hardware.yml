@@ -56,18 +56,56 @@ jobs:
         run: dotnet restore tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj
       - name: Probe actual hardware and temperatures
         run: dotnet run --project tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj --configuration Release --no-restore
-      - name: Publish self-contained Windows app
-        run: dotnet publish src/HardwareMonitor.App/HardwareMonitor.App.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/portable --no-restore
-      - name: Verify published executable
+      - name: Restore background agent smoke probe
+        run: dotnet restore tools/HardwareMonitor.AgentSmoke/HardwareMonitor.AgentSmoke.csproj
+      - name: Build background agent smoke probe
+        run: dotnet build tools/HardwareMonitor.AgentSmoke/HardwareMonitor.AgentSmoke.csproj --configuration Release --no-restore
+      - name: Publish self-contained Windows app and background agent
         shell: powershell
         run: |
-          $exe = Join-Path $PWD 'artifacts/portable/HardwareMonitor.exe'
-          if (-not (Test-Path $exe)) { throw 'HardwareMonitor.exe was not published.' }
-          $item = Get-Item $exe
-          $hash = Get-FileHash $exe -Algorithm SHA256
-          Write-Host "PUBLISHED_EXE=$($item.Name)"
-          Write-Host "PUBLISHED_BYTES=$($item.Length)"
-          Write-Host "PUBLISHED_SHA256=$($hash.Hash)"
+          dotnet publish src/HardwareMonitor.App/HardwareMonitor.App.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/portable --no-restore
+          if ($LASTEXITCODE -ne 0) { throw "Hardware Monitor publish failed with exit code $LASTEXITCODE." }
+          dotnet publish src/HardwareMonitor.Agent/HardwareMonitor.Agent.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/portable --no-restore
+          if ($LASTEXITCODE -ne 0) { throw "Hardware Monitor agent publish failed with exit code $LASTEXITCODE." }
+      - name: Verify published executables
+        shell: powershell
+        run: |
+          foreach ($name in @('HardwareMonitor.exe', 'HardwareMonitor.Agent.exe')) {
+            $exe = Join-Path $PWD "artifacts/portable/$name"
+            if (-not (Test-Path $exe)) { throw "$name was not published." }
+            $item = Get-Item $exe
+            $hash = Get-FileHash $exe -Algorithm SHA256
+            Write-Host "PUBLISHED_EXE=$($item.Name)"
+            Write-Host "PUBLISHED_BYTES=$($item.Length)"
+            Write-Host "PUBLISHED_SHA256=$($hash.Hash)"
+          }
+      - name: Probe standalone background agent process and IPC on real hardware
+        shell: powershell
+        run: |
+          $agentExe = Join-Path $PWD 'artifacts/portable/HardwareMonitor.Agent.exe'
+          $pipe = "HardwareMonitor.Real.$env:GITHUB_RUN_ID"
+          $profileRoot = Join-Path $env:RUNNER_TEMP "HardwareMonitor.Real.$env:GITHUB_RUN_ID"
+          $profilePath = Join-Path $profileRoot 'profiles.json'
+          New-Item -ItemType Directory -Path $profileRoot -Force | Out-Null
+
+          $agentProcess = Start-Process -FilePath $agentExe -ArgumentList @(
+            '--profile-path', $profilePath,
+            '--pipe', $pipe,
+            '--poll-ms', '250'
+          ) -PassThru
+
+          try {
+            dotnet run --project tools/HardwareMonitor.AgentSmoke/HardwareMonitor.AgentSmoke.csproj --configuration Release --no-build -- $pipe
+            if ($LASTEXITCODE -ne 0) { throw "Real-hardware agent smoke failed with exit code $LASTEXITCODE." }
+            if (Test-Path $profilePath) { throw 'Real-hardware agent unexpectedly created or replaced the temporary profile registry.' }
+          }
+          finally {
+            if ($agentProcess -and -not $agentProcess.HasExited) {
+              Stop-Process -Id $agentProcess.Id -Force
+              $agentProcess.WaitForExit()
+            }
+            Remove-Item $profileRoot -Recurse -Force -ErrorAction SilentlyContinue
+          }
       - name: Publish setup bootstrap
         run: dotnet publish src/HardwareMonitor.Setup/HardwareMonitor.Setup.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/setup --no-restore
       - name: Verify setup executable
@@ -83,6 +121,13 @@ jobs:
       - name: Build and validate unsigned MSIX
         shell: powershell
         run: ./packaging/Build-Msix.ps1 -Version 1.0.0.0 -Publisher 'CN=The Spark' -ReleaseTag v1.0.0
+      - name: Verify MSIX staged background agent
+        shell: powershell
+        run: |
+          $agent = Join-Path $PWD 'artifacts/package/stage/HardwareMonitor.Agent.exe'
+          if (-not (Test-Path $agent)) { throw 'HardwareMonitor.Agent.exe is missing from the MSIX stage.' }
+          $hash = Get-FileHash $agent -Algorithm SHA256
+          Write-Host "MSIX_AGENT_SHA256=$($hash.Hash)"
       - name: Upload portable verification build
         uses: actions/upload-artifact@v4
         with:
@@ -121,7 +166,7 @@ jobs:
           HARDWARE_RESULT: ${{ needs.hardware.result }}
         run: |
           $state = if ($env:HARDWARE_RESULT -eq 'success') { 'success' } else { 'failure' }
-          $description = if ($state -eq 'success') { 'Real Windows hardware, tests, and MSIX gate passed' } else { "Real Windows hardware/MSIX gate: $env:HARDWARE_RESULT" }
+          $description = if ($state -eq 'success') { 'Real Windows hardware, agent IPC, tests, and MSIX gate passed' } else { "Real Windows hardware/MSIX gate: $env:HARDWARE_RESULT" }
           $target = "$env:GITHUB_SERVER_URL/$env:GITHUB_REPOSITORY/actions/runs/$env:GITHUB_RUN_ID"
           $body = @{ state = $state; context = 'hardware-monitor/real'; description = $description; target_url = $target } | ConvertTo-Json
           Invoke-RestMethod -Method Post -Uri "https://api.github.com/repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" -Headers @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json'; 'X-GitHub-Api-Version' = '2022-11-28' } -Body $body -ContentType 'application/json' | Out-Null
