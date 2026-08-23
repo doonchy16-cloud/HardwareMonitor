@@ -1,0 +1,38 @@
+name: Agent runtime coordinator RED gate
+
+on:
+  push:
+    branches: [feature/private-multiprofile-v2]
+    paths:
+      - tests/HardwareMonitor.Agent.Tests/AgentRuntimeCoordinatorTests.cs
+      - .github/workflows/agent-runtime-coordinator-red.yml
+
+permissions:
+  contents: read
+
+jobs:
+  red:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v5
+        with:
+          dotnet-version: 10.0.400
+      - name: Restore
+        run: dotnet restore HardwareMonitor.sln
+      - name: Assert intended RED only
+        shell: powershell
+        run: |
+          $output = dotnet build HardwareMonitor.sln --configuration Release --no-restore 2>&1 | Out-String
+          Write-Host $output
+          if ($LASTEXITCODE -eq 0) { throw 'Expected RED build, but build succeeded.' }
+          if ($output -match 'xUnit2031') { throw 'Harness analyzer issue still present.' }
+          if ($output -notmatch "AgentRuntimeCoordinator.*could not be found") { throw 'Expected missing AgentRuntimeCoordinator error was not observed.' }
+          $unexpected = $output -split "`r?`n" | Where-Object {
+            $_ -match ' error ' -and $_ -notmatch 'AgentRuntimeCoordinator.*could not be found'
+          }
+          if ($unexpected) {
+            $unexpected | ForEach-Object { Write-Host "UNEXPECTED_ERROR $_" }
+            throw 'Unexpected errors are present in RED gate.'
+          }
+          Write-Host 'AGENT_RUNTIME_COORDINATOR_RED_CONFIRMED'
