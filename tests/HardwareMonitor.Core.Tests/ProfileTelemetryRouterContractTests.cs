@@ -27,6 +27,14 @@ public sealed class ProfileTelemetryRouterContractTests
     }
 
     [Fact]
+    public void Routed_telemetry_does_not_expose_raw_provider_error_message()
+    {
+        var snapshotType = CoreAssembly.GetType($"{Namespace}.ProfileTelemetrySnapshot");
+        Assert.NotNull(snapshotType);
+        Assert.Null(snapshotType!.GetProperty("ErrorMessage", BindingFlags.Instance | BindingFlags.Public));
+    }
+
+    [Fact]
     public void Router_exposes_one_pure_route_entry_point()
     {
         var router = CoreAssembly.GetType($"{Namespace}.ProfileTelemetryRouter");
