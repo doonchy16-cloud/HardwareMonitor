@@ -88,6 +88,57 @@ jobs:
             throw "Expected exactly one direct Bridge installation, found $($matches.Count). Set repository variable DOONCHY_BRIDGE_ROOT to disambiguate."
           }
           "bridge_root=$($matches[0])" >> $env:GITHUB_OUTPUT
+      - name: Diagnose installed and live Gateway telemetry route parity
+        shell: powershell
+        env:
+          BRIDGE_ROOT: ${{ steps.bridge.outputs.bridge_root }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $telemetryMerge = 'efff06aed3af0c1daa570ebdbe5d1b0d4fe95909'
+          $installedSha = (git -C $env:BRIDGE_ROOT rev-parse HEAD).Trim()
+          $dirty = -not [string]::IsNullOrWhiteSpace((git -C $env:BRIDGE_ROOT status --porcelain | Out-String).Trim())
+          git -C $env:BRIDGE_ROOT merge-base --is-ancestor $telemetryMerge HEAD 2>$null
+          $containsTelemetryMerge = $LASTEXITCODE -eq 0
+          $gatewaySource = Join-Path $env:BRIDGE_ROOT 'src\bridge_gateway.py'
+          $routeText = "/v2/host/hardware-monitor/telemetry"
+          $routeInSource = Test-Path $gatewaySource -and [bool](Select-String -Path $gatewaySource -SimpleMatch $routeText -Quiet)
+
+          $gatewayCfg = Get-Content (Join-Path $env:BRIDGE_ROOT 'config\gateway.local.json') -Raw | ConvertFrom-Json
+          $transportCfg = Get-Content (Join-Path $env:BRIDGE_ROOT 'config\transport-v2.local.json') -Raw | ConvertFrom-Json
+          $localBase = "http://127.0.0.1:$([int]$gatewayCfg.bind_port)"
+          $publicBase = ([string]$transportCfg.gateway_url).TrimEnd('/')
+
+          function Get-Status([string]$Url, [string]$Method = 'GET', [string]$Body = '') {
+            try {
+              $args = @{ Uri=$Url; Method=$Method; UseBasicParsing=$true; TimeoutSec=10; MaximumRedirection=0 }
+              if ($Body) { $args['Body']=$Body; $args['ContentType']='application/json' }
+              $response = Invoke-WebRequest @args
+              return [int]$response.StatusCode
+            }
+            catch {
+              try {
+                if ($_.Exception.Response -and $_.Exception.Response.StatusCode) {
+                  return [int]$_.Exception.Response.StatusCode
+                }
+              }
+              catch { }
+              return -1
+            }
+          }
+
+          $healthStatus = Get-Status "$localBase/health"
+          $gatewayVersion = 'UNAVAILABLE'
+          if ($healthStatus -eq 200) {
+            try {
+              $health = Invoke-RestMethod -Uri "$localBase/health" -Method Get -TimeoutSec 10
+              $gatewayVersion = [string]$health.gateway_version
+            }
+            catch { $gatewayVersion = 'UNREADABLE' }
+          }
+          $localRouteUnauth = Get-Status "$localBase$routeText" 'POST' '{}'
+          $publicRouteUnauth = Get-Status "$publicBase$routeText" 'POST' '{}'
+
+          Write-Host "BRIDGE_GATEWAY_PARITY installed_sha=$installedSha dirty=$dirty contains_telemetry_merge=$containsTelemetryMerge route_in_source=$routeInSource health_status=$healthStatus gateway_version=$gatewayVersion local_route_unauth=$localRouteUnauth public_route_unauth=$publicRouteUnauth"
       - name: Prove real sensor telemetry reaches private Gateway
         shell: powershell
         env:
