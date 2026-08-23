@@ -133,6 +133,7 @@ public sealed class JsonProfileRepository : IProfileRepository
 
         var freshness = document.Freshness
             ?? throw new InvalidDataException("Profile freshness policy is missing.");
+        var thermal = document.Thermal;
 
         return new HardwareProfile(
             document.ProfileId,
@@ -147,7 +148,13 @@ public sealed class JsonProfileRepository : IProfileRepository
             document.Enabled,
             document.Revision,
             new SensorVisibilityPolicy(
-                new HashSet<SensorKind>(document.VisibleSensorKinds ?? Array.Empty<SensorKind>())));
+                new HashSet<SensorKind>(document.VisibleSensorKinds ?? Array.Empty<SensorKind>())),
+            thermal is null
+                ? ThermalThresholdPolicy.Default
+                : new ThermalThresholdPolicy(
+                    thermal.WarmCelsius,
+                    thermal.HotCelsius,
+                    thermal.CriticalCelsius));
     }
 
     private static ProfileDocument ToDocument(HardwareProfile profile) =>
@@ -163,6 +170,12 @@ public sealed class JsonProfileRepository : IProfileRepository
             {
                 StaleAfterSeconds = profile.FreshnessPolicy.StaleAfter.TotalSeconds,
                 OfflineAfterSeconds = profile.FreshnessPolicy.OfflineAfter.TotalSeconds
+            },
+            Thermal = new ThermalDocument
+            {
+                WarmCelsius = profile.ThermalThresholdPolicy.WarmCelsius,
+                HotCelsius = profile.ThermalThresholdPolicy.HotCelsius,
+                CriticalCelsius = profile.ThermalThresholdPolicy.CriticalCelsius
             },
             VisibleSensorKinds = profile.SensorVisibilityPolicy.VisibleKinds.OrderBy(value => value).ToArray(),
             Enabled = profile.Enabled,
@@ -185,6 +198,7 @@ public sealed class JsonProfileRepository : IProfileRepository
         public ViewerScope ViewerScope { get; set; }
         public Guid[]? VisibleProfileIds { get; set; }
         public FreshnessDocument? Freshness { get; set; }
+        public ThermalDocument? Thermal { get; set; }
         public SensorKind[]? VisibleSensorKinds { get; set; }
         public bool Enabled { get; set; }
         public long Revision { get; set; }
@@ -194,5 +208,12 @@ public sealed class JsonProfileRepository : IProfileRepository
     {
         public double StaleAfterSeconds { get; set; }
         public double OfflineAfterSeconds { get; set; }
+    }
+
+    private sealed class ThermalDocument
+    {
+        public double WarmCelsius { get; set; }
+        public double HotCelsius { get; set; }
+        public double CriticalCelsius { get; set; }
     }
 }
