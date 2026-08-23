@@ -2,6 +2,7 @@ using TheSpark.HardwareMonitor.App.Services;
 using TheSpark.HardwareMonitor.Core.Models;
 using TheSpark.HardwareMonitor.Core.Profiles;
 using TheSpark.HardwareMonitor.Core.Status;
+using Xunit;
 
 namespace TheSpark.HardwareMonitor.App.Tests;
 
