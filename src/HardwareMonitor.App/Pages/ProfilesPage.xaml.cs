@@ -119,6 +119,17 @@ public partial class ProfilesPage : UserControl
         editor.StaleAfterSeconds = staleSeconds;
         editor.OfflineAfterSeconds = offlineSeconds;
 
+        if (!double.TryParse(WarmBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var warmCelsius) ||
+            !double.TryParse(HotBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var hotCelsius) ||
+            !double.TryParse(CriticalBox.Text, NumberStyles.Float, CultureInfo.InvariantCulture, out var criticalCelsius))
+        {
+            ValidationText.Text = "Warm, Hot, and Critical thermal thresholds must be numbers.";
+            return;
+        }
+        editor.WarmCelsius = warmCelsius;
+        editor.HotCelsius = hotCelsius;
+        editor.CriticalCelsius = criticalCelsius;
+
         ApplyCapabilities(editor);
         ApplySelectedProfiles(editor);
 
@@ -153,6 +164,9 @@ public partial class ProfilesPage : UserControl
         ViewerScopeBox.SelectedItem = editor.ViewerScope;
         StaleBox.Text = editor.StaleAfterSeconds.ToString(CultureInfo.InvariantCulture);
         OfflineBox.Text = editor.OfflineAfterSeconds.ToString(CultureInfo.InvariantCulture);
+        WarmBox.Text = editor.WarmCelsius.ToString(CultureInfo.InvariantCulture);
+        HotBox.Text = editor.HotCelsius.ToString(CultureInfo.InvariantCulture);
+        CriticalBox.Text = editor.CriticalCelsius.ToString(CultureInfo.InvariantCulture);
         ValidationText.Text = string.Empty;
 
         SetCapabilityChecks(editor);
