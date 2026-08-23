@@ -326,6 +326,7 @@ public partial class ProfilesPage : UserControl
     private void SetEditingEnabled(bool enabled)
     {
         EditorRoot.IsEnabled = enabled;
+        ProfileList.IsEnabled = enabled;
         NewProfileButton.IsEnabled = enabled;
     }
 
