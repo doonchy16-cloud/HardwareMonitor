@@ -101,7 +101,7 @@ jobs:
           $containsTelemetryMerge = $LASTEXITCODE -eq 0
           $gatewaySource = Join-Path $env:BRIDGE_ROOT 'src\bridge_gateway.py'
           $routeText = "/v2/host/hardware-monitor/telemetry"
-          $routeInSource = Test-Path $gatewaySource -and [bool](Select-String -Path $gatewaySource -SimpleMatch $routeText -Quiet)
+          $routeInSource = (Test-Path $gatewaySource) -and [bool](Select-String -Path $gatewaySource -SimpleMatch $routeText -Quiet)
 
           $gatewayCfg = Get-Content (Join-Path $env:BRIDGE_ROOT 'config\gateway.local.json') -Raw | ConvertFrom-Json
           $transportCfg = Get-Content (Join-Path $env:BRIDGE_ROOT 'config\transport-v2.local.json') -Raw | ConvertFrom-Json
