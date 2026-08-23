@@ -102,11 +102,14 @@ jobs:
           $gatewaySource = Join-Path $env:BRIDGE_ROOT 'src\bridge_gateway.py'
           $routeText = "/v2/host/hardware-monitor/telemetry"
           $routeInSource = (Test-Path $gatewaySource) -and [bool](Select-String -Path $gatewaySource -SimpleMatch $routeText -Quiet)
+          Write-Host "BRIDGE_SOURCE_PARITY installed_sha=$installedSha dirty=$dirty contains_telemetry_merge=$containsTelemetryMerge route_in_source=$routeInSource"
 
-          $gatewayCfg = Get-Content (Join-Path $env:BRIDGE_ROOT 'config\gateway.local.json') -Raw | ConvertFrom-Json
-          $transportCfg = Get-Content (Join-Path $env:BRIDGE_ROOT 'config\transport-v2.local.json') -Raw | ConvertFrom-Json
-          $localBase = "http://127.0.0.1:$([int]$gatewayCfg.bind_port)"
-          $publicBase = ([string]$transportCfg.gateway_url).TrimEnd('/')
+          $fleetPath = Join-Path $env:BRIDGE_ROOT 'config\fleet.json'
+          if (-not (Test-Path $fleetPath)) { throw 'Bridge fleet topology config is missing.' }
+          $fleetCfg = Get-Content $fleetPath -Raw | ConvertFrom-Json
+          if ($fleetCfg.schema_version -ne '2.0') { throw 'Bridge fleet topology schema is unsupported.' }
+          $localBase = "http://127.0.0.1:$([int]$fleetCfg.gateway_bind_port)"
+          $publicBase = ([string]$fleetCfg.gateway_public_url).TrimEnd('/')
 
           function Get-Status([string]$Url, [string]$Method = 'GET', [string]$Body = '') {
             try {
@@ -138,7 +141,7 @@ jobs:
           $localRouteUnauth = Get-Status "$localBase$routeText" 'POST' '{}'
           $publicRouteUnauth = Get-Status "$publicBase$routeText" 'POST' '{}'
 
-          Write-Host "BRIDGE_GATEWAY_PARITY installed_sha=$installedSha dirty=$dirty contains_telemetry_merge=$containsTelemetryMerge route_in_source=$routeInSource health_status=$healthStatus gateway_version=$gatewayVersion local_route_unauth=$localRouteUnauth public_route_unauth=$publicRouteUnauth"
+          Write-Host "BRIDGE_GATEWAY_PARITY health_status=$healthStatus gateway_version=$gatewayVersion local_route_unauth=$localRouteUnauth public_route_unauth=$publicRouteUnauth"
       - name: Prove real sensor telemetry reaches private Gateway
         shell: powershell
         env:
