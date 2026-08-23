@@ -1,5 +1,4 @@
 using System.Net;
-using System.Text.Json;
 using TheSpark.HardwareMonitor.Agent;
 using TheSpark.HardwareMonitor.Core.Alerts;
 using TheSpark.HardwareMonitor.Core.Models;
@@ -136,7 +135,7 @@ public sealed class AgentRuntimeCoordinatorTests
         var result = await coordinator.ProcessSnapshotAsync(snapshot, TestContext.Current.CancellationToken);
 
         Assert.Empty(result.AlertEvents);
-        var telemetry = Assert.Single(handler.Requests.Where(item => item.Path == "/v2/hardware-monitor/telemetry"));
+        var telemetry = Assert.Single(handler.Requests, item => item.Path == "/v2/hardware-monitor/telemetry");
         Assert.Contains("valid", telemetry.Body);
         Assert.DoesNotContain("fake", telemetry.Body);
     }
