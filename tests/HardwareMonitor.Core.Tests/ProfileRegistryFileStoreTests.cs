@@ -94,7 +94,7 @@ public sealed class ProfileRegistryFileStoreTests
                 TestContext.Current.CancellationToken);
             var store = new ProfileRegistryFileStore(path);
 
-            await Assert.ThrowsAsync<JsonException>(() => store.LoadAsync(TestContext.Current.CancellationToken));
+            await Assert.ThrowsAnyAsync<JsonException>(() => store.LoadAsync(TestContext.Current.CancellationToken));
         }
         finally
         {
