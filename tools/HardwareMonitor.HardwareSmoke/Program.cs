@@ -1,6 +1,7 @@
 using System.Runtime.InteropServices;
 using TheSpark.HardwareMonitor.Core.Models;
 using TheSpark.HardwareMonitor.Core.Profiles;
+using TheSpark.HardwareMonitor.Core.Profiles.Presence;
 using TheSpark.HardwareMonitor.Core.Profiles.Telemetry;
 using TheSpark.HardwareMonitor.Platform.Windows;
 using TheSpark.HardwareMonitor.Sensors;
@@ -100,5 +101,32 @@ if (routed.ProfileId != gateProfile.Id
 }
 
 Console.WriteLine("PROFILE_ROUTING_PASS");
+
+var freshPresence = ProfilePresenceEvaluator.Evaluate(routed, routed.CapturedAt);
+var stalePresence = ProfilePresenceEvaluator.Evaluate(
+    routed,
+    routed.CapturedAt + gateProfile.Freshness.StaleAfter + TimeSpan.FromTicks(1));
+var offlinePresence = ProfilePresenceEvaluator.Evaluate(
+    routed,
+    routed.CapturedAt + gateProfile.Freshness.OfflineAfter + TimeSpan.FromTicks(1));
+
+Console.WriteLine($"PROFILE_PRESENCE_FRESH={freshPresence.Connectivity}/{freshPresence.TelemetryPresentation}");
+Console.WriteLine($"PROFILE_PRESENCE_STALE={stalePresence.Connectivity}/{stalePresence.TelemetryPresentation}");
+Console.WriteLine($"PROFILE_PRESENCE_OFFLINE={offlinePresence.Connectivity}/{offlinePresence.TelemetryPresentation}");
+
+if (freshPresence.Connectivity != ProfileConnectivityState.Online
+    || freshPresence.TelemetryPresentation != ProfileTelemetryPresentation.Live
+    || stalePresence.Connectivity != ProfileConnectivityState.Stale
+    || stalePresence.TelemetryPresentation != ProfileTelemetryPresentation.Historical
+    || offlinePresence.Connectivity != ProfileConnectivityState.Offline
+    || offlinePresence.TelemetryPresentation != ProfileTelemetryPresentation.Hidden
+    || freshPresence.ProfileId != routed.ProfileId
+    || !string.Equals(freshPresence.SourceDeviceId, routed.SourceDeviceId, StringComparison.Ordinal))
+{
+    Console.Error.WriteLine("PROFILE_PRESENCE_FAIL: real routed telemetry did not produce the required status-first freshness states.");
+    return 70;
+}
+
+Console.WriteLine("PROFILE_PRESENCE_PASS");
 Console.WriteLine("HARDWARE_SMOKE_PASS");
 return 0;
