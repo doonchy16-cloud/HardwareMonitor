@@ -30,7 +30,7 @@ public sealed class ProfileRegistryEditorTests
         Assert.Equal(2, updated.Profiles.Count);
         Assert.Equal(replacement, updated.Profiles[0]);
         Assert.Equal(second, updated.Profiles[1]);
-        Assert.Single(updated.Profiles.Where(profile => profile.Id == first.Id));
+        Assert.Single(updated.Profiles, profile => profile.Id == first.Id);
     }
 
     [Fact]
