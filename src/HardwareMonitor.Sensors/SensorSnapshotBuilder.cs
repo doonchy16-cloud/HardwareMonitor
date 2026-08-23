@@ -13,14 +13,20 @@ public static class SensorSnapshotBuilder
                 device.Id,
                 device.Name,
                 device.Kind,
-                device.Sensors.Select(sensor => new SensorReading(
-                    sensor.Id,
-                    sensor.Name,
-                    sensor.Kind,
-                    sensor.Value,
-                    sensor.Unit,
-                    capturedAt,
-                    sensor.Value.HasValue ? SensorAvailability.Available : SensorAvailability.NotExposed)).ToArray()))
+                device.Sensors.Select(sensor =>
+                {
+                    var value = sensor.Value is { } rawValue && double.IsFinite(rawValue)
+                        ? rawValue
+                        : (double?)null;
+                    return new SensorReading(
+                        sensor.Id,
+                        sensor.Name,
+                        sensor.Kind,
+                        value,
+                        sensor.Unit,
+                        capturedAt,
+                        value.HasValue ? SensorAvailability.Available : SensorAvailability.NotExposed);
+                }).ToArray()))
             .ToArray();
 
         return new HardwareSnapshot(capturedAt, devices, "Healthy");
