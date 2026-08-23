@@ -1,0 +1,65 @@
+name: Signing Preflight v1.0.0
+
+on:
+  push:
+    branches:
+      - release/v1.0.0-signing-probe
+
+permissions:
+  contents: read
+  statuses: write
+
+env:
+  TARGET_SHA: 2170b36a981f743f0edc7a75dd2336c597d12a81
+  PFX_BASE64: ${{ secrets.WINDOWS_SIGNING_PFX_BASE64 }}
+  PFX_PASSWORD: ${{ secrets.WINDOWS_SIGNING_PFX_PASSWORD }}
+
+jobs:
+  probe:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Validate production signing secrets
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $statusUrl = "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA"
+
+          function Publish-Status([string]$state, [string]$description) {
+            $payload = @{ state = $state; context = 'hardware-monitor/signing-preflight'; description = $description } | ConvertTo-Json -Compress
+            $payload | gh api --method POST $statusUrl --input - | Out-Null
+          }
+
+          Publish-Status 'pending' 'Validating Hardware Monitor production signing certificate'
+
+          try {
+            if ([string]::IsNullOrWhiteSpace($env:PFX_BASE64) -or [string]::IsNullOrWhiteSpace($env:PFX_PASSWORD)) {
+              throw 'Required signing secrets are not configured.'
+            }
+
+            $pfxPath = Join-Path $env:RUNNER_TEMP 'hardwaremonitor-signing-preflight.pfx'
+            [System.IO.File]::WriteAllBytes($pfxPath, [Convert]::FromBase64String($env:PFX_BASE64))
+            try {
+              $flags = [System.Security.Cryptography.X509Certificates.X509KeyStorageFlags]::EphemeralKeySet
+              $cert = [System.Security.Cryptography.X509Certificates.X509Certificate2]::new($pfxPath, $env:PFX_PASSWORD, $flags)
+              if (-not $cert.HasPrivateKey) { throw 'Signing certificate has no private key.' }
+              if ($cert.NotBefore -gt (Get-Date)) { throw 'Signing certificate is not valid yet.' }
+              if ($cert.NotAfter -le (Get-Date).AddDays(30)) { throw 'Signing certificate expires within 30 days.' }
+              if ([string]::IsNullOrWhiteSpace($cert.Subject)) { throw 'Signing certificate subject is empty.' }
+
+              Publish-Status 'success' 'Production signing certificate is configured and valid'
+              Write-Host "SIGNING_PREFLIGHT=PASS"
+              Write-Host "PUBLISHER=$($cert.Subject)"
+              Write-Host "VALID_THROUGH=$($cert.NotAfter.ToUniversalTime().ToString('u'))"
+            }
+            finally {
+              Remove-Item $pfxPath -Force -ErrorAction SilentlyContinue
+            }
+          }
+          catch {
+            Publish-Status 'failure' 'Production signing certificate is not ready'
+            Write-Error $_
+            exit 1
+          }
