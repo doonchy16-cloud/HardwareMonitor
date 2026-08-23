@@ -48,6 +48,7 @@ public partial class MainWindow : Window
         var dashboard = new DashboardPage { DataContext = _telemetry };
         var sensors = new SensorsPage { DataContext = _telemetry };
         var hardware = new HardwarePage { DataContext = _hardware };
+        var profiles = new ProfilesPage();
         var settingsPage = new SettingsPage(_monitorService, _telemetry, _log, _settings);
         settingsPage.TemperatureUnitChanged += value =>
         {
@@ -64,6 +65,7 @@ public partial class MainWindow : Window
             ["Dashboard"] = dashboard,
             ["Sensors"] = sensors,
             ["Hardware"] = hardware,
+            ["Profiles"] = profiles,
             ["Settings"] = settingsPage
         };
 
