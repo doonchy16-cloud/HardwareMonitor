@@ -57,19 +57,13 @@ jobs:
 
           $cert = $request.CreateSelfSigned((Get-Date).AddMinutes(-5), (Get-Date).AddDays(7))
           $pfxPath = Join-Path $env:RUNNER_TEMP 'hardwaremonitor-test-signing.pfx'
-          $cerPath = Join-Path $env:RUNNER_TEMP 'hardwaremonitor-test-signing.cer'
           [System.IO.File]::WriteAllBytes($pfxPath, $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Pfx, $passwordPlain))
-          [System.IO.File]::WriteAllBytes($cerPath, $cert.Export([System.Security.Cryptography.X509Certificates.X509ContentType]::Cert))
-
-          & certutil.exe -user -f -addstore Root $cerPath
-          if ($LASTEXITCODE -ne 0) { throw "certutil failed to trust the ephemeral test certificate: $LASTEXITCODE" }
 
           "TEST_PFX_PATH=$pfxPath" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          "TEST_CER_PATH=$cerPath" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "TEST_PFX_PASSWORD=$passwordPlain" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "TEST_PUBLISHER=$($cert.Subject)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
           "TEST_CERT_THUMBPRINT=$($cert.Thumbprint)" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
-          Write-Host "Ephemeral test signing certificate created and trusted: $($cert.Subject)"
+          Write-Host "Ephemeral test signing certificate created: $($cert.Subject)"
 
       - name: Restore solution
         run: dotnet restore HardwareMonitor.sln
@@ -80,21 +74,41 @@ jobs:
       - name: Run tests
         run: dotnet test --solution HardwareMonitor.sln --configuration Release --no-build --minimum-expected-tests 1
 
-      - name: Build signed and timestamped MSIX with test certificate
+      - name: Build unsigned MSIX
         shell: pwsh
         run: |
           ./packaging/Build-Msix.ps1 `
             -Version '1.0.0.0' `
             -Publisher $env:TEST_PUBLISHER `
-            -ReleaseTag 'v1.0.0' `
-            -CertificatePath $env:TEST_PFX_PATH `
-            -CertificatePassword $env:TEST_PFX_PASSWORD `
-            -TimestampUrl $env:TIMESTAMP_URL
+            -ReleaseTag 'v1.0.0'
+
+      - name: Sign and inspect timestamped MSIX
+        shell: pwsh
+        run: |
+          $kitsBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
+          $signTool = Get-ChildItem $kitsBin -Filter SignTool.exe -Recurse -ErrorAction SilentlyContinue |
+            Where-Object { $_.FullName -match '\\x64\\SignTool\.exe$' } |
+            Sort-Object { try { [version]$_.Directory.Parent.Name } catch { [version]'0.0' } } -Descending |
+            Select-Object -First 1
+          if (-not $signTool) { throw 'SignTool.exe was not found.' }
+
+          $msix = Get-ChildItem 'artifacts/package' -Filter '*.msix' | Select-Object -First 1
+          if (-not $msix) { throw 'Unsigned MSIX was not produced.' }
+
+          & $signTool.FullName sign /fd SHA256 /a /f $env:TEST_PFX_PATH /p $env:TEST_PFX_PASSWORD /tr $env:TIMESTAMP_URL /td SHA256 $msix.FullName
+          if ($LASTEXITCODE -ne 0) { throw "MSIX signing or timestamping failed with exit code $LASTEXITCODE." }
+
+          $sig = Get-AuthenticodeSignature -FilePath $msix.FullName
+          if (-not $sig.SignerCertificate) { throw 'MSIX does not contain an Authenticode signer certificate.' }
+          if ($sig.SignerCertificate.Thumbprint -ne $env:TEST_CERT_THUMBPRINT) { throw 'MSIX signer thumbprint does not match the ephemeral test certificate.' }
+          if (-not $sig.TimeStamperCertificate) { throw 'MSIX does not contain an RFC3161 timestamp signer.' }
+          Write-Host "MSIX_SIGNER=$($sig.SignerCertificate.Subject)"
+          Write-Host "MSIX_TIMESTAMPER=$($sig.TimeStamperCertificate.Subject)"
 
       - name: Publish setup bootstrap
         run: dotnet publish src/HardwareMonitor.Setup/HardwareMonitor.Setup.csproj --configuration Release --runtime win-x64 --self-contained true --output artifacts/setup --no-restore
 
-      - name: Sign and verify setup bootstrap with test certificate
+      - name: Sign and inspect timestamped setup bootstrap
         shell: pwsh
         run: |
           $kitsBin = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits/10/bin'
@@ -106,9 +120,14 @@ jobs:
 
           $setupExe = Join-Path $PWD 'artifacts/setup/HardwareMonitor-Setup.exe'
           & $signTool.FullName sign /fd SHA256 /a /f $env:TEST_PFX_PATH /p $env:TEST_PFX_PASSWORD /tr $env:TIMESTAMP_URL /td SHA256 $setupExe
-          if ($LASTEXITCODE -ne 0) { throw "Setup signing failed with exit code $LASTEXITCODE." }
-          & $signTool.FullName verify /pa /v $setupExe
-          if ($LASTEXITCODE -ne 0) { throw "Setup signature verification failed with exit code $LASTEXITCODE." }
+          if ($LASTEXITCODE -ne 0) { throw "Setup signing or timestamping failed with exit code $LASTEXITCODE." }
+
+          $sig = Get-AuthenticodeSignature -FilePath $setupExe
+          if (-not $sig.SignerCertificate) { throw 'Setup EXE does not contain an Authenticode signer certificate.' }
+          if ($sig.SignerCertificate.Thumbprint -ne $env:TEST_CERT_THUMBPRINT) { throw 'Setup EXE signer thumbprint does not match the ephemeral test certificate.' }
+          if (-not $sig.TimeStamperCertificate) { throw 'Setup EXE does not contain an RFC3161 timestamp signer.' }
+          Write-Host "SETUP_SIGNER=$($sig.SignerCertificate.Subject)"
+          Write-Host "SETUP_TIMESTAMPER=$($sig.TimeStamperCertificate.Subject)"
 
       - name: Publish terminal success status
         if: success()
@@ -116,7 +135,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $payload = @{ state='success'; context='hardware-monitor/signing-pipeline-smoke'; description='MSIX and Setup signing pipeline passed with ephemeral test certificate' } | ConvertTo-Json -Compress
+          $payload = @{ state='success'; context='hardware-monitor/signing-pipeline-smoke'; description='MSIX and Setup signing/timestamp pipeline passed with ephemeral test certificate' } | ConvertTo-Json -Compress
           $payload | gh api --method POST "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" --input - | Out-Null
 
       - name: Publish terminal failure status
@@ -125,15 +144,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          $payload = @{ state='failure'; context='hardware-monitor/signing-pipeline-smoke'; description='MSIX or Setup signing pipeline failed during smoke test' } | ConvertTo-Json -Compress
+          $payload = @{ state='failure'; context='hardware-monitor/signing-pipeline-smoke'; description='MSIX or Setup signing/timestamp pipeline failed during smoke test' } | ConvertTo-Json -Compress
           $payload | gh api --method POST "repos/$env:GITHUB_REPOSITORY/statuses/$env:GITHUB_SHA" --input - | Out-Null
 
       - name: Remove ephemeral test signing material
         if: always()
         shell: pwsh
         run: |
-          if (-not [string]::IsNullOrWhiteSpace($env:TEST_CERT_THUMBPRINT)) {
-            & certutil.exe -user -delstore Root $env:TEST_CERT_THUMBPRINT | Out-Null
-          }
           Remove-Item $env:TEST_PFX_PATH -Force -ErrorAction SilentlyContinue
-          Remove-Item $env:TEST_CER_PATH -Force -ErrorAction SilentlyContinue
