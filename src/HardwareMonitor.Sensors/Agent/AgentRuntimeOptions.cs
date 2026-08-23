@@ -25,6 +25,7 @@ public sealed record AgentRuntimeOptions(
         var profilePath = Path.Combine(appDataRoot, "profiles.json");
         var pipeName = AgentIpcProtocol.DefaultPipeName;
         var pollMilliseconds = DefaultPollMilliseconds;
+        string? bridgeRoot = null;
 
         for (var index = 0; index < args.Count; index++)
         {
@@ -71,6 +72,15 @@ public sealed record AgentRuntimeOptions(
                     }
                     break;
 
+                case "--bridge-root":
+                    if (string.IsNullOrWhiteSpace(value))
+                    {
+                        throw new ArgumentException("Bridge root cannot be blank.", nameof(args));
+                    }
+
+                    bridgeRoot = Path.GetFullPath(value.Trim());
+                    break;
+
                 default:
                     throw new ArgumentException($"Unknown agent option '{option}'.", nameof(args));
             }
@@ -80,7 +90,7 @@ public sealed record AgentRuntimeOptions(
             Path.GetFullPath(profilePath),
             pipeName,
             TimeSpan.FromMilliseconds(pollMilliseconds),
-            null,
+            bridgeRoot,
             Path.GetFullPath(Path.Combine(appDataRoot, "gateway-telemetry-sequence.json")));
     }
 }
