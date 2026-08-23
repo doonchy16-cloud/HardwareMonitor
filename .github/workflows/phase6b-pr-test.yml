@@ -89,6 +89,7 @@ jobs:
           }
           "bridge_root=$($matches[0])" >> $env:GITHUB_OUTPUT
       - name: Diagnose installed and live Gateway telemetry route parity
+        id: parity
         shell: powershell
         env:
           BRIDGE_ROOT: ${{ steps.bridge.outputs.bridge_root }}
@@ -142,7 +143,15 @@ jobs:
           $publicRouteUnauth = Get-Status "$publicBase$routeText" 'POST' '{}'
 
           Write-Host "BRIDGE_GATEWAY_PARITY health_status=$healthStatus gateway_version=$gatewayVersion local_route_unauth=$localRouteUnauth public_route_unauth=$publicRouteUnauth"
+          if ($publicRouteUnauth -eq -1 -or $publicRouteUnauth -eq 404) {
+            "needs_gateway_repair=true" >> $env:GITHUB_OUTPUT
+          }
+          else {
+            Write-Host "GATEWAY_PUBLIC_ROUTE_READY public_route_unauth=$publicRouteUnauth"
+            "needs_gateway_repair=false" >> $env:GITHUB_OUTPUT
+          }
       - name: Repair missing local Gateway generation fail-closed
+        if: steps.parity.outputs.needs_gateway_repair == 'true'
         shell: powershell
         env:
           BRIDGE_ROOT: ${{ steps.bridge.outputs.bridge_root }}
