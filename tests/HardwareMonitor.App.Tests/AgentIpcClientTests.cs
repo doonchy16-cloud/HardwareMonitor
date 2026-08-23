@@ -12,6 +12,7 @@ public sealed class AgentIpcClientTests
     [Fact]
     public async Task ClientRequestsCurrentStatusOverLocalPipe()
     {
+        var testToken = TestContext.Current.CancellationToken;
         var pipeName = $"HardwareMonitor.App.Tests.{Guid.NewGuid():N}";
         using var server = new NamedPipeServerStream(
             pipeName,
@@ -22,9 +23,10 @@ public sealed class AgentIpcClientTests
 
         var serverTask = Task.Run(async () =>
         {
-            await server.WaitForConnectionAsync();
+            await server.WaitForConnectionAsync(testToken);
             using var reader = new StreamReader(server, Encoding.UTF8, false, 1024, leaveOpen: true);
-            var request = JsonSerializer.Deserialize<AgentMessage>(await reader.ReadLineAsync() ?? throw new EndOfStreamException());
+            var request = JsonSerializer.Deserialize<AgentMessage>(
+                await reader.ReadLineAsync(testToken) ?? throw new EndOfStreamException());
             Assert.NotNull(request);
             Assert.Equal(AgentProtocol.GetStatus, request!.Type);
 
@@ -41,12 +43,12 @@ public sealed class AgentIpcClientTests
                 request.RequestId,
                 status);
             var bytes = Encoding.UTF8.GetBytes(JsonSerializer.Serialize(response) + "\n");
-            await server.WriteAsync(bytes);
-            await server.FlushAsync();
-        });
+            await server.WriteAsync(bytes, testToken);
+            await server.FlushAsync(testToken);
+        }, testToken);
 
         var client = new AgentIpcClient(pipeName, TimeSpan.FromSeconds(2));
-        var result = await client.GetStatusAsync(CancellationToken.None);
+        var result = await client.GetStatusAsync(testToken);
 
         Assert.Equal("Healthy", result.HealthState);
         Assert.Equal(0, result.ConsecutiveFailures);
