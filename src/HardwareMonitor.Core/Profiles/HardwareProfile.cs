@@ -12,7 +12,8 @@ public sealed class HardwareProfile
         FreshnessPolicy freshnessPolicy,
         bool enabled = true,
         long revision = 0,
-        SensorVisibilityPolicy? sensorVisibilityPolicy = null)
+        SensorVisibilityPolicy? sensorVisibilityPolicy = null,
+        ThermalThresholdPolicy? thermalThresholdPolicy = null)
     {
         if (profileId == Guid.Empty)
         {
@@ -41,6 +42,7 @@ public sealed class HardwareProfile
         VisibleProfileIds = new HashSet<Guid>(visibleProfileIds);
         FreshnessPolicy = freshnessPolicy;
         SensorVisibilityPolicy = sensorVisibilityPolicy ?? SensorVisibilityPolicy.All;
+        ThermalThresholdPolicy = thermalThresholdPolicy ?? ThermalThresholdPolicy.Default;
         Enabled = enabled;
         Revision = revision;
     }
@@ -53,6 +55,7 @@ public sealed class HardwareProfile
     public IReadOnlySet<Guid> VisibleProfileIds { get; }
     public FreshnessPolicy FreshnessPolicy { get; }
     public SensorVisibilityPolicy SensorVisibilityPolicy { get; }
+    public ThermalThresholdPolicy ThermalThresholdPolicy { get; }
     public bool Enabled { get; }
     public long Revision { get; }
 }
