@@ -30,5 +30,32 @@ public static class ProfilePresenceEvaluator
 {
     public static ProfilePresenceSnapshot Evaluate(
         ProfileTelemetrySnapshot telemetry,
-        DateTimeOffset evaluatedAt) => throw new NotImplementedException();
+        DateTimeOffset evaluatedAt)
+    {
+        ArgumentNullException.ThrowIfNull(telemetry);
+
+        if (evaluatedAt < telemetry.CapturedAt)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(evaluatedAt),
+                "Presence evaluation time cannot precede the telemetry capture time.");
+        }
+
+        var age = evaluatedAt - telemetry.CapturedAt;
+        var (connectivity, presentation) = age > telemetry.Freshness.OfflineAfter
+            ? (ProfileConnectivityState.Offline, ProfileTelemetryPresentation.Hidden)
+            : age > telemetry.Freshness.StaleAfter
+                ? (ProfileConnectivityState.Stale, ProfileTelemetryPresentation.Historical)
+                : (ProfileConnectivityState.Online, ProfileTelemetryPresentation.Live);
+
+        return new ProfilePresenceSnapshot(
+            telemetry.ProfileId,
+            telemetry.SourceDeviceId,
+            telemetry.CapturedAt,
+            evaluatedAt,
+            age,
+            connectivity,
+            presentation,
+            telemetry.EngineStatus);
+    }
 }
