@@ -19,7 +19,7 @@ public static class ProfileRegistryEditor
         }
 
         ValidateSelectedProfileReferences(profiles);
-        return new ProfileRegistryDocument(registry.SchemaVersion, profiles);
+        return new ProfileRegistryDocument(registry.SchemaVersion, registry.Revision, profiles);
     }
 
     public static ProfileRegistryDocument Remove(ProfileRegistryDocument registry, Guid profileId)
@@ -44,7 +44,7 @@ public static class ProfileRegistryEditor
         }
 
         profiles.RemoveAt(index);
-        return new ProfileRegistryDocument(registry.SchemaVersion, profiles);
+        return new ProfileRegistryDocument(registry.SchemaVersion, registry.Revision, profiles);
     }
 
     private static void ValidateSelectedProfileReferences(IReadOnlyList<MonitoringProfile> profiles)

@@ -1,7 +1,11 @@
+using System.Text.Json;
+
 namespace TheSpark.HardwareMonitor.Core.Profiles;
 
 public sealed class ProfileRegistryFileStore
 {
+    private readonly SemaphoreSlim _ioLock = new(1, 1);
+
     public ProfileRegistryFileStore(string filePath)
     {
         if (string.IsNullOrWhiteSpace(filePath))
@@ -10,20 +14,40 @@ public sealed class ProfileRegistryFileStore
         }
 
         FilePath = Path.GetFullPath(filePath.Trim());
+        BackupFilePath = FilePath + ".bak";
     }
 
     public string FilePath { get; }
 
+    public string BackupFilePath { get; }
+
     public async Task<ProfileRegistryDocument> LoadAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        if (!File.Exists(FilePath))
+        await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
         {
-            return ProfileRegistryDocument.Empty;
-        }
+            if (!File.Exists(FilePath))
+            {
+                return File.Exists(BackupFilePath)
+                    ? await RecoverFromBackupAsync(cancellationToken).ConfigureAwait(false)
+                    : ProfileRegistryDocument.Empty;
+            }
 
-        var json = await File.ReadAllTextAsync(FilePath, cancellationToken).ConfigureAwait(false);
-        return ProfileJsonSerializer.Deserialize(json);
+            try
+            {
+                var json = await File.ReadAllTextAsync(FilePath, cancellationToken).ConfigureAwait(false);
+                return ProfileJsonSerializer.Deserialize(json);
+            }
+            catch (Exception ex) when (IsRecoverableCacheException(ex) && File.Exists(BackupFilePath))
+            {
+                return await RecoverFromBackupAsync(cancellationToken).ConfigureAwait(false);
+            }
+        }
+        finally
+        {
+            _ioLock.Release();
+        }
     }
 
     public async Task SaveAsync(ProfileRegistryDocument document, CancellationToken cancellationToken = default)
@@ -32,7 +56,35 @@ public sealed class ProfileRegistryFileStore
         cancellationToken.ThrowIfCancellationRequested();
 
         var json = ProfileJsonSerializer.Serialize(document);
-        var directory = Path.GetDirectoryName(FilePath);
+        await _ioLock.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await WriteAtomicallyAsync(FilePath, json, cancellationToken).ConfigureAwait(false);
+            await WriteAtomicallyAsync(BackupFilePath, json, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _ioLock.Release();
+        }
+    }
+
+    private async Task<ProfileRegistryDocument> RecoverFromBackupAsync(CancellationToken cancellationToken)
+    {
+        var backupJson = await File.ReadAllTextAsync(BackupFilePath, cancellationToken).ConfigureAwait(false);
+        var document = ProfileJsonSerializer.Deserialize(backupJson);
+        await WriteAtomicallyAsync(FilePath, backupJson, cancellationToken).ConfigureAwait(false);
+        return document;
+    }
+
+    private static bool IsRecoverableCacheException(Exception exception) =>
+        exception is JsonException or NotSupportedException or ArgumentException or InvalidDataException;
+
+    private static async Task WriteAtomicallyAsync(
+        string path,
+        string content,
+        CancellationToken cancellationToken)
+    {
+        var directory = Path.GetDirectoryName(path);
         if (!string.IsNullOrWhiteSpace(directory))
         {
             Directory.CreateDirectory(directory);
@@ -41,14 +93,12 @@ public sealed class ProfileRegistryFileStore
         var tempDirectory = string.IsNullOrWhiteSpace(directory)
             ? Directory.GetCurrentDirectory()
             : directory;
-        var tempPath = Path.Combine(
-            tempDirectory,
-            $".{Path.GetFileName(FilePath)}.{Guid.NewGuid():N}.tmp");
+        var tempPath = Path.Combine(tempDirectory, $".{Path.GetFileName(path)}.{Guid.NewGuid():N}.tmp");
 
         try
         {
-            await File.WriteAllTextAsync(tempPath, json, cancellationToken).ConfigureAwait(false);
-            File.Move(tempPath, FilePath, true);
+            await File.WriteAllTextAsync(tempPath, content, cancellationToken).ConfigureAwait(false);
+            File.Move(tempPath, path, true);
         }
         finally
         {

@@ -9,6 +9,8 @@ namespace TheSpark.HardwareMonitor.App.Pages;
 public partial class ProfilesPage : UserControl
 {
     private readonly ProfileRegistryFileStore _store;
+    private readonly ProfileRegistrySyncMetadataFileStore _syncMetadataStore;
+    private readonly ProfileRegistryLocalMutationStore _mutationStore;
     private ProfileRegistryDocument _registry = ProfileRegistryDocument.Empty;
     private Guid? _editingProfileId;
     private bool _loadingEditor;
@@ -26,6 +28,9 @@ public partial class ProfilesPage : UserControl
             "profiles.json");
 
         _store = new ProfileRegistryFileStore(profilePath);
+        var syncMetadataPath = Path.Combine(Path.GetDirectoryName(profilePath)!, "profiles.sync.json");
+        _syncMetadataStore = new ProfileRegistrySyncMetadataFileStore(syncMetadataPath);
+        _mutationStore = new ProfileRegistryLocalMutationStore(_store, _syncMetadataStore);
         Loaded += ProfilesPage_Loaded;
         PrepareNewProfile();
     }
@@ -53,7 +58,19 @@ public partial class ProfilesPage : UserControl
             SetEditingEnabled(true);
             RefreshProfileLists();
             PrepareNewProfile();
-            StatusText.Text = $"Loaded {_registry.Profiles.Count} profile(s).";
+            var syncMetadata = await _syncMetadataStore.LoadAsync();
+            StatusText.Text = syncMetadata.LastStatus switch
+            {
+                ProfileRegistrySyncStatus.Conflict =>
+                    $"Loaded {_registry.Profiles.Count} profile(s). Central registry conflict: local pending revision {syncMetadata.PendingBaseRevision?.ToString() ?? "none"}, remote revision {syncMetadata.LastObservedRemoteRevision?.ToString() ?? "unknown"}. Your local edit is preserved.",
+                ProfileRegistrySyncStatus.PendingUpload =>
+                    $"Loaded {_registry.Profiles.Count} profile(s). Central sync pending from revision {syncMetadata.PendingBaseRevision}.",
+                ProfileRegistrySyncStatus.Stale =>
+                    $"Loaded {_registry.Profiles.Count} profile(s). Using cached profiles; central sync is currently stale.",
+                ProfileRegistrySyncStatus.Current =>
+                    $"Loaded {_registry.Profiles.Count} profile(s). Central sync current at revision {syncMetadata.LastKnownRemoteRevision}.",
+                _ => $"Loaded {_registry.Profiles.Count} profile(s).",
+            };
         }
         catch (OperationCanceledException)
         {
@@ -109,13 +126,13 @@ public partial class ProfilesPage : UserControl
         {
             var profile = BuildProfileFromEditor();
             var updated = ProfileRegistryEditor.Upsert(_registry, profile);
-            await _store.SaveAsync(updated);
+            await _mutationStore.SaveAsync(updated);
 
             _registry = updated;
             _editingProfileId = profile.Id;
             RefreshProfileLists();
             SelectProfile(profile.Id);
-            StatusText.Text = $"Saved '{profile.DisplayName}'.";
+            StatusText.Text = $"Saved '{profile.DisplayName}' locally. Central sync is pending.";
         }
         catch (OperationCanceledException)
         {
@@ -153,12 +170,12 @@ public partial class ProfilesPage : UserControl
         try
         {
             var updated = ProfileRegistryEditor.Remove(_registry, existing.Id);
-            await _store.SaveAsync(updated);
+            await _mutationStore.SaveAsync(updated);
 
             _registry = updated;
             RefreshProfileLists();
             PrepareNewProfile();
-            StatusText.Text = $"Deleted '{existing.DisplayName}'.";
+            StatusText.Text = $"Deleted '{existing.DisplayName}' locally. Central sync is pending.";
         }
         catch (OperationCanceledException)
         {

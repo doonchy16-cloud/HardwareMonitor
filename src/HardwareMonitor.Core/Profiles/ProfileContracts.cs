@@ -329,12 +329,22 @@ public sealed record MonitoringProfile
 
 public sealed record ProfileRegistryDocument
 {
-    [JsonConstructor]
     public ProfileRegistryDocument(int schemaVersion, IReadOnlyList<MonitoringProfile> profiles)
+        : this(schemaVersion, 0, profiles)
+    {
+    }
+
+    [JsonConstructor]
+    public ProfileRegistryDocument(int schemaVersion, long revision, IReadOnlyList<MonitoringProfile> profiles)
     {
         if (schemaVersion != ProfileContract.CurrentSchemaVersion)
         {
             throw new NotSupportedException($"Profile schema version {schemaVersion} is not supported.");
+        }
+
+        if (revision < 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(revision), "Profile registry revision cannot be negative.");
         }
 
         ArgumentNullException.ThrowIfNull(profiles);
@@ -350,14 +360,17 @@ public sealed record ProfileRegistryDocument
         }
 
         SchemaVersion = schemaVersion;
+        Revision = revision;
         Profiles = materialized;
     }
 
     public int SchemaVersion { get; }
 
+    public long Revision { get; }
+
     public IReadOnlyList<MonitoringProfile> Profiles { get; }
 
-    public static ProfileRegistryDocument Empty => new(ProfileContract.CurrentSchemaVersion, Array.Empty<MonitoringProfile>());
+    public static ProfileRegistryDocument Empty => new(ProfileContract.CurrentSchemaVersion, 0, Array.Empty<MonitoringProfile>());
 }
 
 public static class ProfileJsonSerializer
