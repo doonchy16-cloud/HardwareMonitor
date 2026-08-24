@@ -1,0 +1,100 @@
+name: Phase 7 PR real hardware
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'tools/**'
+      - '.github/workflows/phase7-pr-test.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  phase7-real:
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          clean: true
+          fetch-depth: 1
+          persist-credentials: false
+      - uses: actions/setup-dotnet@v5
+        env:
+          DOTNET_INSTALL_DIR: ${{ runner.temp }}/dotnet
+        with:
+          dotnet-version: 10.0.400
+      - name: Restore
+        run: |
+          dotnet restore HardwareMonitor.sln
+          dotnet restore tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj
+      - name: Build
+        run: |
+          dotnet build HardwareMonitor.sln --configuration Release --no-restore
+          dotnet build tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj --configuration Release --no-restore
+      - name: Run solution tests
+        run: dotnet test --solution HardwareMonitor.sln --configuration Release --no-build --minimum-expected-tests 1
+      - name: Locate direct Doonchy Bridge
+        id: bridge
+        shell: powershell
+        env:
+          BRIDGE_ROOT_OVERRIDE: ${{ vars.DOONCHY_BRIDGE_ROOT }}
+        run: |
+          function Test-DirectBridgeRoot([string]$Path) {
+            if ([string]::IsNullOrWhiteSpace($Path)) { return $false }
+            $transportPath = Join-Path $Path 'config\transport-v2.local.json'
+            $identityPath = Join-Path $Path 'config\identity.json'
+            if (-not (Test-Path $transportPath) -or -not (Test-Path $identityPath)) { return $false }
+            try {
+              $transport = Get-Content $transportPath -Raw | ConvertFrom-Json
+              $identity = Get-Content $identityPath -Raw | ConvertFrom-Json
+              return $transport.schema_version -eq '2.0' `
+                -and $transport.mode -eq 'direct' `
+                -and -not [string]::IsNullOrWhiteSpace([string]$transport.gateway_url) `
+                -and ([string]$transport.host_token).Length -ge 24 `
+                -and $identity.schema_version -eq '1.1'
+            }
+            catch { return $false }
+          }
+          $matches = @()
+          if (-not [string]::IsNullOrWhiteSpace($env:BRIDGE_ROOT_OVERRIDE)) {
+            if (-not (Test-DirectBridgeRoot $env:BRIDGE_ROOT_OVERRIDE)) { throw 'DOONCHY_BRIDGE_ROOT is not a valid direct Bridge.' }
+            $matches = @((Resolve-Path $env:BRIDGE_ROOT_OVERRIDE).Path)
+          } else {
+            foreach ($drive in Get-PSDrive -PSProvider FileSystem) {
+              try {
+                foreach ($directory in Get-ChildItem -Path $drive.Root -Directory -Force -ErrorAction Stop) {
+                  if (Test-DirectBridgeRoot $directory.FullName) { $matches += $directory.FullName }
+                }
+              } catch { }
+            }
+            $matches = @($matches | Sort-Object -Unique)
+          }
+          if ($matches.Count -ne 1) { throw "Expected exactly one direct Bridge installation, found $($matches.Count)." }
+          "bridge_root=$($matches[0])" >> $env:GITHUB_OUTPUT
+      - name: Probe real hardware and Gateway telemetry
+        shell: powershell
+        env:
+          BRIDGE_ROOT: ${{ steps.bridge.outputs.bridge_root }}
+        run: |
+          $sequencePath = Join-Path $env:LOCALAPPDATA 'The Spark\Hardware Monitor\gateway-telemetry-sequence.json'
+          dotnet run --project tools/HardwareMonitor.HardwareSmoke/HardwareMonitor.HardwareSmoke.csproj --configuration Release --no-build -- `
+            --gateway-bridge-root $env:BRIDGE_ROOT `
+            --gateway-sequence-path $sequencePath
+          if ($LASTEXITCODE -ne 0) { throw "Real hardware/Gateway smoke failed with exit code $LASTEXITCODE." }
+      - name: Prove live central profile registry route
+        shell: powershell
+        env:
+          BRIDGE_ROOT: ${{ steps.bridge.outputs.bridge_root }}
+        run: |
+          $transport = Get-Content (Join-Path $env:BRIDGE_ROOT 'config\transport-v2.local.json') -Raw | ConvertFrom-Json
+          $uri = ([string]$transport.gateway_url).TrimEnd('/') + '/v2/host/hardware-monitor/registry'
+          $headers = @{ Authorization = 'Bearer ' + [string]$transport.host_token }
+          $result = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers -TimeoutSec 10
+          if ($result.schema_version -ne 'hardware-monitor.registry.v1') { throw 'Unexpected central registry schema.' }
+          $revision = [int64]$result.registry.revision
+          if ($revision -lt 0) { throw 'Central registry revision is invalid.' }
+          Write-Host "PHASE7_CENTRAL_REGISTRY_ROUTE_PASS revision=$revision profiles=$(@($result.registry.profiles).Count)"
