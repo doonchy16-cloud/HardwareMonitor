@@ -28,6 +28,8 @@ await using var agent = new BackgroundHardwareAgent(monitorService, profileStore
 await using var ipcServer = new AgentIpcServer(agent, options.PipeName);
 
 BridgeGatewayTelemetryPublisher? telemetryPublisher = null;
+BridgeGatewayProfileRegistryClient? profileRegistryClient = null;
+ProfileRegistrySyncWorker? profileSyncWorker = null;
 if (options.BridgeRoot is not null)
 {
     telemetryPublisher = new BridgeGatewayTelemetryPublisher(
@@ -36,6 +38,25 @@ if (options.BridgeRoot is not null)
         profileStore,
         new HttpClientHandler());
     monitorService.SnapshotUpdated += telemetryPublisher.Queue;
+
+    try
+    {
+        profileRegistryClient = new BridgeGatewayProfileRegistryClient(
+            options.BridgeRoot,
+            new HttpClientHandler());
+        var profileSyncMetadataStore = new ProfileRegistrySyncMetadataFileStore(options.ProfileSyncMetadataPath);
+        var profileSyncCoordinator = new ProfileRegistrySyncCoordinator(
+            profileStore,
+            profileSyncMetadataStore,
+            profileRegistryClient);
+        profileSyncWorker = new ProfileRegistrySyncWorker(profileSyncCoordinator, options.ProfileSyncInterval);
+    }
+    catch (Exception ex) when (ex is not OutOfMemoryException)
+    {
+        profileRegistryClient?.Dispose();
+        profileRegistryClient = null;
+        profileSyncWorker = null;
+    }
 }
 
 using var shutdown = new CancellationTokenSource();
@@ -44,6 +65,11 @@ AppDomain.CurrentDomain.ProcessExit += ProcessExit;
 
 try
 {
+    if (profileSyncWorker is not null)
+    {
+        await profileSyncWorker.StartAsync().ConfigureAwait(false);
+    }
+
     if (telemetryPublisher is not null)
     {
         await telemetryPublisher.StartAsync().ConfigureAwait(false);
@@ -63,6 +89,12 @@ try
 finally
 {
     AppDomain.CurrentDomain.ProcessExit -= ProcessExit;
+    if (profileSyncWorker is not null)
+    {
+        await profileSyncWorker.DisposeAsync().ConfigureAwait(false);
+    }
+    profileRegistryClient?.Dispose();
+
     if (telemetryPublisher is not null)
     {
         monitorService.SnapshotUpdated -= telemetryPublisher.Queue;
